@@ -1,6 +1,6 @@
-from core.setup_gdal import setup_gdal
+# from core.setup_gdal import setup_gdal
 
-setup_gdal()  # Only use it in development
+# setup_gdal()  # Only use it in development
 
 import logging
 from pathlib import Path
