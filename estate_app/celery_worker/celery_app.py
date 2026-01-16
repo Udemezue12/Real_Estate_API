@@ -43,8 +43,8 @@ class CeleryManager:
             broker_connection_max_retries=None,
             task_acks_late=False,
             worker_cancel_long_running_tasks_on_connection_loss=False,
-            broker_use_ssl={"ssl_cert_reqs": "required"},
-            redis_backend_use_ssl={"ssl_cert_reqs": "required"},
+            # broker_use_ssl={"ssl_cert_reqs": "required"},
+            # redis_backend_use_ssl={"ssl_cert_reqs": "required"},
             redis_socket_keepalive=True,
             redis_socket_timeout=30,
             broker_transport_options={

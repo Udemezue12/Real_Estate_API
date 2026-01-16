@@ -1,6 +1,9 @@
 # from core.setup_gdal import setup_gdal
 
 # setup_gdal()  # Only use it in development
+from core.redis_patch import setup_redis
+
+setup_redis()
 
 import logging
 from pathlib import Path
