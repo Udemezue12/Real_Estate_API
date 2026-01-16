@@ -39,10 +39,12 @@ class CeleryManager:
             timezone="UTC",
             enable_utc=True,
             broker_connection_retry=True,
-            broker_connection_retry_on_startup=True,
+            broker_connection_retry_on_startup=False,
             broker_connection_max_retries=None,
             task_acks_late=False,
             worker_cancel_long_running_tasks_on_connection_loss=False,
+            broker_use_ssl={"ssl_cert_reqs": "required"},
+            redis_backend_use_ssl={"ssl_cert_reqs": "required"},
             redis_socket_keepalive=True,
             redis_socket_timeout=30,
             broker_transport_options={
@@ -84,9 +86,7 @@ class CeleryManager:
             "expire-pending-viewings-hourly": {
                 "task": "expire_pending_viewings",
                 "schedule": crontab(minute=0),
-            }
-        }
-        self.app.conf.beat_schedule = {
+            },
             "process-rent-notifications-daily": {
                 "task": "process_rent_notifications",
                 "schedule": crontab(hour=1, minute=0),
