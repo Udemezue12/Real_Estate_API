@@ -1,4 +1,4 @@
-import redis.asyncio as aioredis
+from redis.asyncio import from_url
 from .settings import settings
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
@@ -12,7 +12,7 @@ class RateLimitManager:
 
     async def connect(self):
         try:
-            self.redis = aioredis.from_url(
+            self.redis = from_url(
                 settings.RATE_LIMIT_REDIS_URL,
                 encoding="utf-8",
                 decode_responses=True,
