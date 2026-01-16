@@ -21,7 +21,7 @@ class Settings(BaseSettings):
         f"@{os.getenv('RATE_LIMIT_REDIS_HOST')}:{os.getenv('RATE_LIMIT_REDIS_PORT')}/0"
     )
     CELERY_REDIS_URL: str = (
-        f"redis://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
+        f"rediss://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
         f"@{os.getenv('CELERY_REDIS_HOST')}:{os.getenv('CELERY_REDIS_PORT')}/0"
     )
     RABBITMQ_MAIN_EXCHANGE: str = "location_events"
