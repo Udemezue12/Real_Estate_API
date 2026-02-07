@@ -1,243 +1,244 @@
-🏢✨ Property Management & Sales System
+<h1 align="center">🏢✨ Property Management & Sales System</h1>
 
-FastAPI • Async • FinTech • Real-Time • Distributed Systems
+<p align="center">
+  <b>FastAPI • Async • FinTech • Real-Time • Distributed Systems</b>
+</p>
 
-A production-grade, asynchronous real estate platform for managing property sales, rentals, tenants, payments, and communication — built with scalability, security, and reliability at its core.
+<p align="center">
 
-📝 Project Note
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white"/>
+  <img src="https://img.shields.io/badge/FastAPI-Async-009688?logo=fastapi&logoColor=white"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-Async-336791?logo=postgresql&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Redis-Cache-red?logo=redis&logoColor=white"/>
+  <img src="https://img.shields.io/badge/RabbitMQ-Broker-FF6600?logo=rabbitmq&logoColor=white"/>
 
-This system is designed to solve real-world challenges in property management and real estate transactions by combining modern backend architecture, financial integrations, and real-time communication.
+</p>
 
-It enables property owners, managers, and tenants to interact securely through a unified digital platform.
+<p align="center">
 
-The project emphasizes:
+  <img src="https://img.shields.io/badge/Celery-Tasks-37814A?logo=celery&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Dramatiq-Workers-black"/>
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white"/>
 
-✅ Reliability
-✅ Financial security
-✅ Performance
-✅ Scalability
-✅ Clean architecture
+</p>
 
-🌟 What This System Does
-🏘️ Property & Listing Management
+<p align="center">
 
-Create properties for sale or rent
+  <img src="https://img.shields.io/badge/Paystack-Payments-00C3F7"/>
+  <img src="https://img.shields.io/badge/Flutterwave-Payments-F5A623"/>
+  <img src="https://img.shields.io/badge/Status-Production%20Ready-success"/>
+  <img src="https://img.shields.io/badge/License-Proprietary-red"/>
 
-Manage multiple properties per owner
+</p>
 
-Attach tenants to rental properties
+---
 
-Track property status and availability
+<p align="center">
+✨ A production-grade, asynchronous real estate platform for managing property sales, rentals, tenants, payments, and communication — built with scalability, security, and reliability at its core.
+</p>
 
-👥 Tenant Management
+---
 
-Register and manage tenants
+## 📝 Project Note
 
-Assign tenants to properties
+This system is designed to solve real-world challenges in **property management and real estate transactions** by combining modern backend architecture, financial integrations, and real-time communication.
 
-Maintain tenant history
+It enables **property owners, managers, and tenants** to interact securely through a unified digital platform.
 
-Monitor rent status
+### Core Principles
 
-💬 Real-Time Messaging (WebSockets)
+✅ Reliability  
+✅ Financial Security  
+✅ Performance  
+✅ Scalability  
+✅ Clean Architecture  
 
-Live chat for:
+---
 
-Sales inquiries
+## 🌟 What This System Does
 
-Rental discussions
+### 🏘️ Property & Listing Management
+- Create properties for sale or rent
+- Manage multiple properties per owner
+- Attach tenants to rental properties
+- Track property status and availability
 
-Instant notifications
+### 👥 Tenant Management
+- Register and manage tenants
+- Assign tenants to properties
+- Maintain tenant history
+- Monitor rent status
 
-Property-based messaging channels
+### 💬 Real-Time Messaging (WebSockets)
+- Live chat for sales and rentals
+- Instant notifications
+- Property-based messaging channels
 
-💳 Secure Payment Processing
-🌐 Online Payments
+### 💳 Secure Payment Processing
 
-Paystack
+#### 🌐 Online Payments
+- Paystack
+- Flutterwave
 
-Flutterwave
+#### 📄 Offline Payments
+- Receipt upload
+- Verification workflow
 
-📄 Offline Payments
+#### ⚙️ Automated Processing
+- Payment validation
+- Transaction tracking
+- Secure logging
+- Status reconciliation
 
-Receipt upload
+### 🧾 Rent Receipt Generation
+- Automatic receipt creation
+- Triggered after successful payment
+- Supports online and offline payments
+- Stored for audit and reference
 
-Verification workflow
+### ✉️ Owner–Tenant Communication
+- Letters
+- Notices
+- Announcements
+- Property-based communication
 
-⚙️ Automated Processing
+### 🪪 Profile Verification & Fraud Prevention
+- Bank Account Verification
+- BVN Verification
+- NIN Verification
+- Integrated identity services
 
-Payment validation
+---
 
-Transaction tracking
-
-Secure logging
-
-Status reconciliation
-
-🧾 Rent Receipt Generation
-
-Automatic receipt creation
-
-Triggered after successful payment
-
-Works for both online and offline payments
-
-Stored for audit and reference
-
-✉️ Owner–Tenant Communication
-
-Owners can send:
-
-Letters
-
-Notices
-
-Announcements
-
-Communication per property or tenant group
-
-🪪 Profile Verification & Fraud Prevention
-
-To eliminate fake or duplicate profiles, the system supports:
-
-Bank Account Verification
-
-BVN Verification
-
-NIN Verification
-
-Integrated directly with verification services.
-
-⚡ Performance & Reliability Layer
+## ⚡ Performance & Reliability Layer
 
 The platform implements enterprise-grade reliability patterns:
 
-✅ Caching
-✅ Rate Limiting
-✅ Idempotency
-✅ Circuit Breaker
-✅ Retry Mechanisms
-✅ Background Processing
-✅ Distributed Workers
-✅ Geospatial Queries
+✅ Caching  
+✅ Rate Limiting  
+✅ Idempotency  
+✅ Circuit Breaker  
+✅ Retry Mechanisms  
+✅ Background Processing  
+✅ Distributed Workers  
+✅ Geospatial Queries  
 
 Ensuring high availability and fault tolerance.
 
-🛠️ Technology Stack
-🚀 Backend & API
+---
 
-FastAPI (Async)
+## 🛠️ Technology Stack
 
-PostgreSQL (Async)
+### 🚀 Backend & API
+- FastAPI (Async)
+- PostgreSQL (Async)
+- SQLAlchemy / asyncpg
+- WebSockets
 
-SQLAlchemy / asyncpg
+### 📩 Messaging & Workers
+- RabbitMQ
+- Celery
+- Dramatiq
 
-WebSockets
+### ☁️ Storage & Media
+- Cloudinary
 
-📩 Messaging & Workers
+### 💰 Fintech & Notifications
+- Paystack
+- Flutterwave
+- Termii (SMS / OTP)
+- Gmail SMTP
 
-RabbitMQ
+### 🧩 Infrastructure
+- Redis Cache
+- Rate Limiter
+- Circuit Breaker
+- Idempotency Middleware
 
-Celery
+---
 
-Dramatiq
+## 📁 Project Structure
 
-☁️ Storage & Media
-
-Cloudinary
-
-💰 Fintech & Notifications
-
-Paystack
-
-Flutterwave
-
-Termii (SMS / OTP)
-
-Gmail SMTP
-
-🧩 Infrastructure
-
-Redis Cache
-
-Rate Limiter
-
-Circuit Breaker
-
-Idempotency Middleware
-
-📁 Project Structure
 real-estate-project/
 │
 ├── estate-app/
-│   ├── core/          → System configuration
-│   ├── models/        → Database models
-│   ├── services/      → Business logic
-│   ├── repos/         → Data access layer
-│   ├── routes/        → API endpoints
-│   ├── webhooks/      → Payment & event handlers
-│   ├── fintechs/      → Fintech integrations
-│   ├── workers/       → Background tasks
-│   ├── utils/         → Helper utilities
-│   └── app.py        → Application entry
+│ ├── core/ → System configuration
+│ ├── models/ → Database models
+│ ├── services/ → Business logic
+│ ├── repos/ → Data access layer
+│ ├── routes/ → API endpoints
+│ ├── webhooks/ → Payment handlers
+│ ├── fintechs/ → Fintech integrations
+│ ├── workers/ → Background tasks
+│ ├── utils/ → Helper utilities
+│ └── app.py → Application entry
 │
 ├── migrations/
 ├── requirements.txt
 └── README.md
 
-🏗️ System Architecture
-Client Apps
-     ↓
+
+---
+
+## 🏗️ System Architecture
+
+Client Applications
+↓
 FastAPI (REST + WebSocket)
-     ↓
+↓
 Service Layer
-     ↓
+↓
 Repository Layer
-     ↓
+↓
 PostgreSQL (Async)
-     ↓
+↓
 Redis / RabbitMQ
-     ↓
+↓
 Celery / Dramatiq Workers
 
-🔐 Security & Compliance
 
-The platform is built with strong security practices:
+---
 
-🔒 JWT Authentication
-🔒 Role-Based Access Control
-🔒 Rate Limiting
-🔒 Webhook Verification
-🔒 Encrypted Secrets
-🔒 Input Validation
-🔒 Secure Financial Processing
+## 🔐 Security & Compliance
 
-🌍 Deployment
+The platform follows strong security standards:
 
-Docker-ready
+🔒 JWT Authentication  
+🔒 Role-Based Access Control  
+🔒 Rate Limiting  
+🔒 Webhook Verification  
+🔒 Encrypted Secrets  
+🔒 Input Validation  
+🔒 Secure Financial Processing  
 
-Supports VPS & Cloud Servers
+---
 
-Works with private infrastructure
+## 🌍 Deployment
 
-Currently deployed without a public domain
+- Docker-ready
+- Supports VPS & Cloud Servers
+- Works with private infrastructure
+- Currently deployed without a public domain
 
-Compatible with:
-
+### Compatible Platforms
 ☁️ AWS • GCP • Azure • DigitalOcean • On-Premise
 
-▶️ Setup & Installation
-1️⃣ Clone Project
+---
+
+## ▶️ Setup & Installation
+
+### 1️⃣ Clone Project
+```bash
 git clone https://github.com/your-username/real-estate-project.git
 cd real-estate-project
 
 2️⃣ Install Dependencies
 pip install -r requirements.txt
 
+
 3️⃣ Configure Environment
 
 Create .env file:
-
 DATABASE_URL=
 REDIS_URL=
 RABBITMQ_URL=
@@ -294,7 +295,7 @@ Available after startup:
 
 👨‍💻 Author
 
-Udemezue Uchechukwu
+Udemezue Uchechukwu Jude
 Backend Engineer | Python | Distributed Systems | FinTech
 
 📄 License
