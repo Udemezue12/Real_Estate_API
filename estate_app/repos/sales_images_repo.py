@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime
 
 from fastapi import HTTPException
-from models.models import SaleListingImage
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+
+from models.models import SaleListingImage
 
 
 class SaleListingImageRepo:
@@ -40,7 +41,7 @@ class SaleListingImageRepo:
             end = end.replace(tzinfo=None)
         stmt = (
             select(func.count(SaleListingImage.id))
-            .where(SaleListingImage.created_by_id== user_id)
+            .where(SaleListingImage.created_by_id == user_id)
             .where(SaleListingImage.uploaded_at >= start)
             .where(SaleListingImage.uploaded_at < end)
         )
@@ -62,7 +63,7 @@ class SaleListingImageRepo:
             public_id=public_id,
             listing_id=listing_id,
             created_by_id=created_by_id,
-            sale_image_creator=sale_image_creator
+            sale_image_creator=sale_image_creator,
         )
         self.db.add(image)
         try:
@@ -73,15 +74,36 @@ class SaleListingImageRepo:
             await self.db.rollback()
             raise
 
-    async def get_one(self, image_id: uuid.UUID) -> SaleListingImage | None:
+    async def get_one_image(
+        self, image_id: uuid.UUID, listing_id: uuid.UUID
+    ) -> SaleListingImage | None:
         result = await self.db.execute(
-            select(SaleListingImage).where(SaleListingImage.id == image_id)
+            select(SaleListingImage).where(
+                SaleListingImage.id == image_id,
+                SaleListingImage.listing_id == listing_id,
+            )
+        )
+        return result.scalar_one_or_none()
+    async def get_one(
+        self, image_id: uuid.UUID
+    ) -> SaleListingImage | None:
+        result = await self.db.execute(
+            select(SaleListingImage).where(
+                SaleListingImage.id == image_id,
+               
+            )
         )
         return result.scalar_one_or_none()
 
-    async def get_all(self, listing_id: uuid.UUID) -> list[SaleListingImage]:
+    async def get_all(
+        self, listing_id: uuid.UUID, page: int = 1, per_page: int = 20
+    ) -> list[SaleListingImage]:
         result = await self.db.execute(
-            select(SaleListingImage).where(SaleListingImage.listing_id == listing_id)
+            select(SaleListingImage)
+            .where(SaleListingImage.listing_id == listing_id)
+            .order_by(SaleListingImage.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -136,3 +158,6 @@ class SaleListingImageRepo:
         stmt = delete(SaleListingImage).where(SaleListingImage.listing_id == listing_id)
         await self.db.execute(stmt)
         await self.db.commit()
+
+    async def db_rollback(self):
+        await self.db.rollback()

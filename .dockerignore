@@ -1,11 +1,16 @@
 /.mypy_cache/
 /estate-env/
 /estate_app/__pycache__/
+/estate_app/.mypy_cache/
 /estate_app/.env
 /estate_app/admin/__pycache__
 /estate_app/admin_piccolo_folder/__pycache__
 /estate_app/alembic/__pycache__
+/estate_app/alembic/.mypy_cache
+/estate_app/alembic/versions/__pycache__
 /estate_app/celery_worker/__pycache__
+/estate_app/dramatiq_worker/__pycache__
+/estate_app/drammatiq_tasks/__pycache__
 /estate_app/core/__pycache__
 /estate_app/email_notify/__pycache__
 /estate_app/fire_and_forget/__pycache__
@@ -17,10 +22,15 @@
 /estate_app/routes/__pycache__
 /estate_app/schemas/__pycache__
 /estate_app/security/__pycache__
+/estate_app/webhooks/__pycache__
 /estate_app/services/__pycache__
 /estate_app/sms_notify/__pycache__
 /estate_app/tasks/__pycache__
 /estate_app/verify_nin/__pycache__
+/estate_app/states_list/__pycache__
+/estate_app/fintech_process_payments/__pycache__
+/estate_app/fintech_verify_signature/__pycache__
+/estate_app/fintechs/__pycache__
 /estate_app/core/env.py
 
 

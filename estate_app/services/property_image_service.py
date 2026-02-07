@@ -1,17 +1,19 @@
-import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 
 from core.breaker import breaker
 from core.cache import cache
+from core.check_permission import CheckRolePermission
 from core.cloudinary_setup import CloudinaryClient
 from core.delete_token import DeleteTokenGenerator
 from core.event_publish import publish_event
 from core.file_hash import ComputeFileHash
+from core.mapper import ORMMapper
 from core.paginate import PaginatePage
-from fastapi import HTTPException
 from repos.property_image_repo import PropertyImageRepo
+from schemas.schema import BaseImageOut
 
 MAX_DAILY_UPLOADS = 4
 
@@ -24,8 +26,10 @@ class PropertyImageService:
         self.repo: PropertyImageRepo = PropertyImageRepo(db)
         self.cloudinary: CloudinaryClient = CloudinaryClient()
         self.paginate: PaginatePage = PaginatePage()
+        self.mapper: ORMMapper = ORMMapper()
         self.token_delete: DeleteTokenGenerator = DeleteTokenGenerator()
         self.compute: ComputeFileHash = ComputeFileHash()
+        self.permission:CheckRolePermission=CheckRolePermission()
 
     async def enforce_daily_quota(self, user_id: uuid.UUID):
         today_start = (
@@ -45,17 +49,22 @@ class PropertyImageService:
             raise HTTPException(status_code=429, detail="Daily upload limit reached")
 
     async def get_all_images(
-        self, property_id: uuid.UUID, page: int = 1, per_page: int = 20
-    ):
+        self, current_user, property_id: uuid.UUID, page: int = 1, per_page: int = 20
+    ) -> list[BaseImageOut]:
         async def handler():
-            cache_key = f"property_listing:{property_id}:images"
+            await self.permission.check_authenticated(current_user=current_user)
+            cache_key = f"property_listing:{property_id}:images:{page}:{per_page}"
             cached = await cache.get_json(cache_key)
             if cached:
-                return cached
+                return self.mapper.many(items=cached, schema=BaseImageOut)
             images = await self.repo.get_all(property_id=property_id)
-            image_dicts = [{"id": str(img.id), "url": img.image_path} for img in images]
-            paginated_images = self.paginate.paginate(image_dicts, page, per_page)
-            await cache.set_json(cache_key, paginated_images, ttl=300)
+            images_out = self.mapper.many(items=images, schema=BaseImageOut)
+            paginated_images = self.paginate.paginate(images_out, page, per_page)
+            await cache.set_json(
+                cache_key,
+                self.paginate.get_list_json_dumps(paginated_images),
+                ttl=300,
+            )
             return paginated_images
 
         return await breaker.call(handler)
@@ -64,10 +73,11 @@ class PropertyImageService:
         self,
         property_id: uuid.UUID,
         image_url: str,
-        current_user,
         public_id: str,
+        current_user,
     ):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             await self.enforce_daily_quota(user_id=current_user.id)
             count = await self.repo.count_for_listing(property_id)
 
@@ -94,8 +104,7 @@ class PropertyImageService:
                 f"property_listing:{property_id}:images"
             )
 
-            asyncio.create_task(
-                publish_event(
+            await publish_event(
                     "sale_listing.image.created",
                     {
                         "listing_id": str(property_id),
@@ -103,7 +112,7 @@ class PropertyImageService:
                         "url": image.image_path,
                     },
                 )
-            )
+            
             return {"id": str(image.id), "url": image.image_path}
 
         return await breaker.call(handler)
@@ -125,7 +134,7 @@ class PropertyImageService:
                 new_public_id=public_id,
             )
         except Exception:
-            await self.repo.db.rollback()
+            await self.repo.db_rollback()
             await self.cloudinary.safe_delete_cloudinary(public_id, resource_type)
             raise HTTPException(500, "Failed to update image")
 
@@ -138,6 +147,7 @@ class PropertyImageService:
         resource_type: str = "images",
     ):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             old_image = await self.repo.get_one(image_id)
             if not old_image:
                 raise HTTPException(status_code=404, detail="Image not found")
@@ -179,6 +189,7 @@ class PropertyImageService:
         self, image_id: uuid.UUID, current_user, resource_type: str = "images"
     ):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             image = await self.repo.get_one(image_id)
             property_id = image.property_id
             if not image:
@@ -197,12 +208,12 @@ class PropertyImageService:
             if not validated_token:
                 raise HTTPException(403, detail="Invalid delete token")
 
+            await self.cloudinary.safe_delete_cloudinary(
+                public_id=image.public_id, resource_type=resource_type
+            )
             await self.repo.delete_one(image_id)
             await cache.delete_cache_keys_async(
                 f"property_listing:{property_id}:images"
-            )
-            await self.cloudinary.safe_delete_cloudinary(
-                public_id=image.public_id, resource_type=resource_type
             )
             return {"deleted": True, "id": str(image.id)}
 

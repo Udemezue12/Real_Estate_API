@@ -1,4 +1,3 @@
-# models.py (corrected)
 import re
 import uuid
 from datetime import date, datetime
@@ -6,7 +5,6 @@ from typing import List, Optional
 from uuid import uuid4
 
 from bcrypt import checkpw, gensalt, hashpw
-from core.get_db import Base
 from geoalchemy2 import Geography
 from sqlalchemy import (
     JSON,
@@ -20,30 +18,37 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    func,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+
+from core.get_db import Base
 
 from .enums import (
-    ViewingStatus,
-    ApplicationType,
+    PDF_STATUS,
+    RENT_PAYMENT_STATUS,
+    SOLD_BY,
+    AccountNumberVerificationStatus,
+    AccountVerificationProviders,
+    BVNStatus,
+    BVNVerificationProviders,
     Furnishing,
     GenderChoices,
     HouseType,
+    LetterType,
     NINVerificationProviders,
-    BVNVerificationProviders,
+    NINVerificationStatus,
+    PaymentProvider,
+    PaymentStatus,
+    PayoutStatus,
     PropertyTypes,
     RentCycle,
-    NINVerificationStatus,
     RentDuration,
     UserRole,
-    RENT_PAYMENT_STATUS,
-    PDF_STATUS,
-    BVNStatus,
-    SOLD_BY
+    ViewingStatus,
 )
 from .shape import convert_location
 from .utils import calculate_expiry
@@ -62,14 +67,14 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    role: Mapped[ApplicationType] = mapped_column(
+    role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False), nullable=False, default=None
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow()
     )
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     sale_sender_encrypted_message: Mapped[List["SaleEncryptedMessage"]] = relationship(
@@ -210,6 +215,11 @@ class User(Base):
         foreign_keys="RentReceipt.landlord_id",
         cascade="all, delete-orphan",
     )
+    sent_letters = relationship(
+        "Letter",
+        back_populates="sender",
+        cascade="all, delete-orphan",
+    )
 
     credentials = relationship("PasskeyCredential", back_populates="user")
 
@@ -260,6 +270,12 @@ class UserProfile(Base):
         unique=True,
         nullable=False,
     )
+    flutterwave_account_name: Mapped[str] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    paystack_account_name: Mapped[str] = mapped_column(
+        String(255), nullable=True, index=True
+    )
 
     user: Mapped["User"] = relationship("User", back_populates="profile", uselist=False)
 
@@ -270,8 +286,68 @@ class UserProfile(Base):
         String(64), nullable=False, index=True
     )
     public_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    
-    nin_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+
+    nin_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    account_number: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    bank_name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    paystack_bank_code: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    flutterwave_bank_code: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    paystack_account_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True
+    )
+    paystack_account_verification_error: Mapped[str] = mapped_column(
+        Text, nullable=True
+    )
+    paystack_account_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    paystack_account_verification_status: Mapped[AccountNumberVerificationStatus] = (
+        mapped_column(
+            Enum(AccountNumberVerificationStatus, native_enum=False),
+            default=AccountNumberVerificationStatus.PENDING,
+            index=True,
+            nullable=False,
+        )
+    )
+    paystack_account_verification_provider: Mapped[AccountVerificationProviders] = (
+        mapped_column(
+            Enum(AccountVerificationProviders, native_enum=False),
+            nullable=False,
+            default=AccountVerificationProviders.NONE_YET,
+        )
+    )
+    flutterwave_account_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True
+    )
+    flutterwave_account_verification_error: Mapped[str] = mapped_column(
+        Text, nullable=True
+    )
+    flutterwave_account_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    flutterwave_account_verification_status: Mapped[AccountNumberVerificationStatus] = (
+        mapped_column(
+            Enum(AccountNumberVerificationStatus, native_enum=False),
+            default=AccountNumberVerificationStatus.PENDING,
+            index=True,
+            nullable=False,
+        )
+    )
+    flutterwave_account_verification_provider: Mapped[AccountVerificationProviders] = (
+        mapped_column(
+            Enum(AccountVerificationProviders, native_enum=False),
+            nullable=False,
+            default=AccountVerificationProviders.NONE_YET,
+        )
+    )
 
     nin_verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     bvn_verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -322,14 +398,17 @@ class UserProfile(Base):
         default=BVNVerificationProviders.NONE_YET,
     )
     profile_pic_uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow
+        DateTime, default=datetime.utcnow()
     )
+    paystack_recipient_code = mapped_column(String(100), nullable=True, index=True)
+
+    flutterwave_beneficiary_id = mapped_column(String(100), nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True
+        DateTime, default=datetime.utcnow(), index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow()
     )
 
 
@@ -367,9 +446,9 @@ class State(Base):
     name: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow()
     )
     location: Mapped[Optional[object]] = mapped_column(
         Geography(geometry_type="POINT", srid=4326), nullable=True, index=True
@@ -408,9 +487,9 @@ class LocalGovernmentArea(Base):
     name: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow()
     )
     location: Mapped[Optional[object]] = mapped_column(
         Geography(geometry_type="POINT", srid=4326), nullable=True, index=True
@@ -515,10 +594,13 @@ class Property(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow(), nullable=False
+    )
+    property_letters = relationship(
+        "LetterRecipient", back_populates="property", cascade="all, delete-orphan"
     )
 
     images: Mapped[List["PropertyImage"]] = relationship(
@@ -549,7 +631,7 @@ class PropertyImage(Base):
     image_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     public_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), nullable=False
     )
     property_image_creator: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
@@ -574,7 +656,7 @@ class PropertyImage(Base):
         foreign_keys=[property_by_id],
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow(), nullable=False
     )
 
     def __repr__(self):
@@ -619,6 +701,9 @@ class Tenant(Base):
     matched_user: Mapped[Optional["User"]] = relationship(
         "User", foreign_keys=[matched_user_id]
     )
+    matched_user_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True
+    )
 
     rent_amount: Mapped[Optional[Numeric]] = mapped_column(Numeric(12, 2))
     rent_cycle: Mapped[RentCycle] = mapped_column(
@@ -629,12 +714,15 @@ class Tenant(Base):
     rent_expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    letters = relationship(
+        "LetterRecipient", back_populates="tenant", cascade="all, delete-orphan"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow(), nullable=False
     )
 
     rent_receipts: Mapped[List["RentReceipt"]] = relationship(
@@ -704,7 +792,7 @@ class RentLedger(Base):
     old_value: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     new_value: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), nullable=False
     )
 
 
@@ -719,6 +807,11 @@ class RentReceipt(Base):
         UUID(as_uuid=True), ForeignKey("tenants.id")
     )
     tenant = relationship("Tenant", back_populates="rent_receipts")
+    payment_context = mapped_column(
+        Enum("FULL_RENT", "HALF_RENT", "OUTSTANDING_BALANCE", name="payment_context"),
+        default="FULL_RENT",
+        nullable=False,
+    )
 
     property_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("properties.id")
@@ -731,11 +824,13 @@ class RentReceipt(Base):
     )
     landlord = relationship("User", back_populates="rent_receipts")
 
-    amount = mapped_column(Numeric(12, 2), nullable=False)
+    expected_amount = mapped_column(Numeric(12, 2), nullable=False)
+    amount_paid = mapped_column(Numeric(12, 2), nullable=False)
+    remaining_balance = mapped_column(Numeric(12, 2), nullable=False)
     month_paid_for = mapped_column(Integer)
     year_paid_for = mapped_column(Integer)
     rent_duration_months = mapped_column(Integer)
-
+    fully_paid: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     reference_number = mapped_column(String(69), unique=True)
     barcode_reference = mapped_column(String(69), unique=True, nullable=True)
     pdf_status: Mapped[PDF_STATUS] = mapped_column(
@@ -752,18 +847,21 @@ class RentReceipt(Base):
         back_populates="rent_receipt",
         uselist=False,
     )
+    payment_id = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payment_transactions.id"), nullable=True
+    )
 
-    created_at = mapped_column(DateTime, default=datetime.utcnow)
+    created_at = mapped_column(DateTime, default=datetime.utcnow())
 
-    # __table_args__ = (
-    #     UniqueConstraint(
-    #         "tenant_id",
-    #         "property_id",
-    #         "month_paid_for",
-    #         "year_paid_for",
-    #         name="uq_rent_receipt_per_month",
-    #     ),
-    # )
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "property_id",
+            "month_paid_for",
+            "year_paid_for",
+            name="uq_rent_receipt_per_month",
+        ),
+    )
 
 
 class RentalListing(Base):
@@ -832,6 +930,9 @@ class RentalListing(Base):
     rent_amount: Mapped[Numeric] = mapped_column(
         Numeric(precision=12, scale=2), nullable=False
     )
+    rent_cycle: Mapped[RentCycle] = mapped_column(
+        Enum(RentCycle, native_enum=False), nullable=False, index=True
+    )
     contact_phone: Mapped[str] = mapped_column(String(20), nullable=False)
 
     slug: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
@@ -839,10 +940,13 @@ class RentalListing(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime,
+        default=datetime.utcnow(),
+        onupdate=datetime.utcnow(),
+        nullable=False,
     )
 
     verified_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -853,19 +957,18 @@ class RentalListing(Base):
     )
 
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     gallery: Mapped[List["RentalListingImage"]] = relationship(
         "RentalListingImage", back_populates="listing", cascade="all, delete-orphan"
     )
     unavailable_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    available_again_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
+    available_again_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
 
     def __repr__(self):
         return f"<RentalListing {self.title} - {self.address}>"
-
-   
 
 
 class RentPaymentProof(Base):
@@ -896,9 +999,9 @@ class RentPaymentProof(Base):
         ForeignKey("rent_receipts.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        # unique=True
     )
     rent_receipt = relationship("RentReceipt", back_populates="payment_proof")
+    amount_paid = mapped_column(Numeric(12, 2), nullable=False)
 
     status: Mapped[RENT_PAYMENT_STATUS] = mapped_column(
         Enum(RENT_PAYMENT_STATUS, native_enum=False),
@@ -915,13 +1018,17 @@ class RentPaymentProof(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    rejection_reason: Mapped[str] = mapped_column(Text, nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=True)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
     uploaded_by = relationship(
         "User",
         back_populates="rent_payments_images_created_by",
         foreign_keys=[created_by_id],
     )
 
-    uploaded_at = mapped_column(DateTime, default=datetime.utcnow)
+    uploaded_at = mapped_column(DateTime, default=datetime.utcnow())
 
 
 class RentalListingImage(Base):
@@ -963,10 +1070,10 @@ class RentalListingImage(Base):
     public_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     image_path: Mapped[str] = mapped_column(String(512), nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow(), nullable=False
     )
 
     def as_dict(self):
@@ -1031,9 +1138,9 @@ class SaleListing(Base):
     price: Mapped[Numeric] = mapped_column(Numeric(15, 2), nullable=False)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow()
     )
     bathrooms: Mapped[Optional[int]] = mapped_column(Integer, default=1)
     toilets: Mapped[Optional[int]] = mapped_column(Integer, default=1)
@@ -1085,9 +1192,9 @@ class SaleListingImage(Base):
     image_path: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     image_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     public_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow()
     )
 
     def as_dict(self):
@@ -1159,8 +1266,8 @@ class SaleConversation(Base):
         "User", back_populates="property_seller", foreign_keys=[seller_id]
     )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
 
     __table_args__ = (
         UniqueConstraint("listing_id", "buyer_id", name="uq_listing_buyer"),
@@ -1211,8 +1318,8 @@ class RentalConversation(Base):
         "User", back_populates="property_owner", foreign_keys=[owner_id]
     )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
 
     __table_args__ = (
         UniqueConstraint("listing_id", "renter_id", name="uq_listing_renter"),
@@ -1264,7 +1371,7 @@ class SaleEncryptedMessage(Base):
     receiver_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
 
 
 class RentalEncryptedMessage(Base):
@@ -1313,7 +1420,7 @@ class RentalEncryptedMessage(Base):
     receiver_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
 
 
 class SalesViewingHistory(Base):
@@ -1341,7 +1448,7 @@ class SalesViewingHistory(Base):
     changed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
-    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
 
 
 class RentalViewingHistory(Base):
@@ -1369,7 +1476,7 @@ class RentalViewingHistory(Base):
     changed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
-    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
 
 
 class IdempotencyKey(Base):
@@ -1408,14 +1515,235 @@ class IdempotencyKey(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=datetime.utcnow(),
         nullable=False,
         index=True,
     )
 
     user: Mapped["User"] = relationship("User")
 
-    __table_args__ = (UniqueConstraint("key", name="uq_idempotency_key"),)
+    __table_args__ = (UniqueConstraint("key", "user_id", name="uq_idempotency_key"),)
 
     def __repr__(self) -> str:
         return f"<IdempotencyKey key={self.key} user_id={self.user_id}>"
+
+
+class RentInvoice(Base):
+    __tablename__ = "rent_invoices"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    tenant_id = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    landlord_id = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    landlord_profile_id = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_profiles.id")
+    )
+
+    total_amount: Mapped[Optional[Numeric]] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    amount_paid: Mapped[Optional[Numeric]] = mapped_column(Numeric(12, 2), default=0)
+
+    is_fully_paid: Mapped[bool] = mapped_column(Boolean, default=False)
+    payment_provider: Mapped[PaymentProvider] = mapped_column(
+        Enum(PaymentProvider, native_enum=False)
+    )
+    provider_reference: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+    currency: Mapped[str] = mapped_column(String(10))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
+
+
+class PaymentTransaction(Base):
+    __tablename__ = "payment_transactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    invoice_id = mapped_column(UUID(as_uuid=True), ForeignKey("rent_invoices.id"))
+    landlord_id = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    landlord_profile_id = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_profiles.id")
+    )
+
+    tenant_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_email: Mapped[str] = mapped_column(String, nullable=False)
+    landlord_phoneNumber: Mapped[str] = mapped_column(String(20), nullable=True)
+    tenant_phoneNumber: Mapped[str] = mapped_column(String(20), nullable=True)
+
+    landlord_email: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_firstname: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant_lastname: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant_middlename: Mapped[str] = mapped_column(String(255), nullable=False)
+    landlord_firstname: Mapped[str] = mapped_column(String(255), nullable=False)
+    landlord_lastname: Mapped[str] = mapped_column(String(255), nullable=False)
+    landlord_middlename: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant = relationship("Tenant")
+    property_owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+
+    property_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("properties.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    property = relationship("Property")
+
+    payment_provider: Mapped[PaymentProvider] = mapped_column(
+        Enum(PaymentProvider, native_enum=False)
+    )
+    provider_reference: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+
+    amount_received: Mapped[Optional[Numeric]] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    currency: Mapped[str] = mapped_column(String(10))
+
+    status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus, native_enum=False),
+        default=PaymentStatus.PENDING,
+    )
+
+    created_at = mapped_column(DateTime, default=datetime.utcnow())
+
+
+class LandlordPayout(Base):
+    __tablename__ = "landlord_payouts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    payment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True)
+    landlord_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+
+    amount: Mapped[Optional[Numeric]] = mapped_column(Numeric(12, 2), nullable=False)
+
+    status: Mapped[PayoutStatus] = mapped_column(
+        Enum(PayoutStatus, native_enum=False),
+        default=PayoutStatus.PENDING,
+    )
+
+    provider_reference: Mapped[str] = mapped_column(
+        String(120), unique=True, nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
+
+
+class Bank(Base):
+    __tablename__ = "banks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    canonical_name = mapped_column(String, nullable=False, index=True)
+
+    paystack_bank_code: Mapped[str] = mapped_column(String, nullable=True)
+    flutterwave_bank_code: Mapped[str] = mapped_column(String, nullable=True)
+
+    __table_args__ = (UniqueConstraint("name", name="uq_bank_canonical"),)
+
+
+class Letter(Base):
+    __tablename__ = "letters"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    caretaker_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    sender: Mapped["User"] = relationship("User", back_populates="sent_letters")
+
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("properties.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    property: Mapped["Property"] = relationship("Property")
+
+    letter_type: Mapped[LetterType] = mapped_column(
+        Enum(LetterType, native_enum=False),
+        nullable=False,
+        index=True,
+    )
+
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=True)
+
+    file_path: Mapped[str] = mapped_column(String(512), nullable=True)
+    file_hash: Mapped[str] = mapped_column(String(64), nullable=True)
+    public_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow(), index=True
+    )
+
+    recipients: Mapped[List["LetterRecipient"]] = relationship(
+        "LetterRecipient",
+        back_populates="letter",
+        cascade="all, delete-orphan",
+    )
+
+
+class LetterRecipient(Base):
+    __tablename__ = "letter_recipients"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    letter_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("letters.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    letter: Mapped["Letter"] = relationship("Letter", back_populates="recipients")
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="letters")
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("properties.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    property: Mapped["Property"] = relationship(
+        "Property", back_populates="property_letters"
+    )
+
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    delivered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow())
+
+    __table_args__ = (
+        UniqueConstraint("letter_id", "tenant_id", name="uq_letter_tenant"),
+    )

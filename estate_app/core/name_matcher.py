@@ -29,3 +29,22 @@ class NameMatcher:
             return False
 
         return db_tokens.issubset(input_tokens)
+    def bank_normalize(self, name: str) -> list[str]:
+        name = re.sub(r"[^\w\s]", "", name.lower())
+        return name.split()
+
+    async def bank_name_match(self, user:User, bank_name: str) -> bool:
+        parts = filter(None, [
+            user.first_name,
+            user.middle_name,
+            user.last_name,
+        ])
+
+        user_name = " ".join(parts)
+
+        user_parts = set(self.bank_normalize(user_name))
+        bank_parts = set(self.bank_normalize(bank_name))
+
+        matches = user_parts & bank_parts
+
+        return len(matches) >= 2

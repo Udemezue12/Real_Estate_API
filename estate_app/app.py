@@ -1,24 +1,25 @@
-# from core.setup_gdal import setup_gdal
+from core.setup_gdal import setup_gdal
 
-# setup_gdal()  # Only use it in development
-from core.redis_patch import setup_redis
+setup_gdal()  # Only use it in development
+# from core.redis_patch import setup_redis
 
-setup_redis()
+# setup_redis()
 
 import logging
 from pathlib import Path
 
 import uvicorn
 from admin_piccolo_folder.admin_app import AdminApp
+from core.auto_logout_middleware import AutoLogoutMiddleware
 from core.catch_error_middleware import ErrorHandlerMiddleware
-from core.exception_handler import ValidationErrorHandler
-from fastapi.exceptions import RequestValidationError
 from core.csrf_middleware import AutoRefreshAccessTokenMiddleware
+from core.exception_handler import ValidationErrorHandler
 from core.get_csrfToken import csrf_router
 from core.lifespan import lifespan
 from core.settings import settings
 from core.throttling import rate_limiter_manager
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi_admin.app import app as admin_app
@@ -30,6 +31,7 @@ from routes.passkey_routes import router as passkey_router
 from routes.profile_routes import router as profile_router
 from routes.property_image_routes import router as property_image_router
 from routes.property_routes import router as property_router
+from routes.rent_payment_routes import router as rent_payment_router
 from routes.rent_proof_routes import router as proofs_router
 from routes.rent_receipt_routes import router as rent_receipts_router
 from routes.rental_images import router as rental_upload_router
@@ -40,8 +42,10 @@ from routes.sales_message_routes import router as sales_message_router
 from routes.sales_routes import router as sales_router
 from routes.state_routes import router as state_router
 from routes.tenant_routes import router as tenant_router
+from routes.webhooks_routes import router as webhooks_router
+from routes.bank_routes import router as bank_router
 from starlette.middleware.sessions import SessionMiddleware
-from core.auto_logout_middleware import AutoLogoutMiddleware
+from routes.letters_routes import router as letter_router
 
 app = FastAPI()
 
@@ -60,6 +64,7 @@ app.mount("/fastapi/admin", admin_app)  # FastApi_Admin with Tortoise
 app.mount("/admin", AdminApp)  # FastApi_Admin with SQLAlchemy
 app.include_router(csrf_router, prefix="/v2")
 app.include_router(user_router, prefix="/v2")
+app.include_router(bank_router, prefix="/v2")
 app.include_router(profile_router, prefix="/v2/profile")
 app.include_router(passkey_router, prefix="/v2/passkey")
 app.include_router(state_router, prefix="/v2/state")
@@ -73,10 +78,13 @@ app.include_router(sales_router, prefix="/v2/property_sales")
 app.include_router(rental_router, prefix="/v2/rentals")
 app.include_router(proofs_router, prefix="/v2/rent_proofs")
 app.include_router(rent_receipts_router, prefix="/v2/rent_receipts")
-app.include_router(cloudinary_router, prefix="/v2")
+app.include_router(rent_payment_router, prefix="/v2/rent_payments")
 app.include_router(sales_chat_router, prefix="/v2")
 app.include_router(sales_message_router, prefix="/v2/sales")
 app.include_router(rental_message_router, prefix="/v2/rental")
+app.include_router(letter_router, prefix="/v2/letter")
+app.include_router(webhooks_router, prefix="/v2")
+app.include_router(cloudinary_router, prefix="/v2")
 
 app.add_middleware(
     CORSMiddleware,

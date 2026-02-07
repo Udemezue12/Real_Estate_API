@@ -1,8 +1,9 @@
 import uuid
 
-from security.security_generate import user_generate
 from slugify import slugify
 from sqlalchemy import event
+
+from security.security_generate import user_generate
 
 from .enums import FLAT_ALIASES, SELF_CON_ALIASES, PropertyTypes
 from .models import (
@@ -11,7 +12,6 @@ from .models import (
     SaleListing,
     Tenant,
 )
-from .utils import slugify
 
 
 @event.listens_for(RentalListing, "before_insert")

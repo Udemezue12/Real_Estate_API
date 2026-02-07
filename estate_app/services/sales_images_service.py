@@ -2,20 +2,29 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
+
 from core.breaker import breaker
 from core.cache import cache
+from core.check_permission import CheckRolePermission
 from core.cloudinary_setup import CloudinaryClient
 from core.delete_token import DeleteTokenGenerator
 from core.event_publish import publish_event
 from core.file_hash import ComputeFileHash
+from core.mapper import ORMMapper
 from core.paginate import PaginatePage
-from fastapi import HTTPException
+from core.redis_idempotency import RedisIdempotency
 from repos.sales_images_repo import SaleListingImageRepo
+from schemas.schema import BaseImageOut
 
 MAX_DAILY_UPLOADS = 4
 
 
 class SaleListingImageService:
+    CREATE_LOCK_KEY = "create-sales-images:sync:v2"
+    UPDATE_LOCK_KEY = "update-sales-images:sync:v2"
+    DELETE_LOCK_KEY = "delete-sales-images:sync:v2"
+
     def __init__(
         self,
         db,
@@ -25,6 +34,9 @@ class SaleListingImageService:
         self.paginate: PaginatePage = PaginatePage()
         self.token_delete: DeleteTokenGenerator = DeleteTokenGenerator()
         self.compute: ComputeFileHash = ComputeFileHash()
+        self.mapper: ORMMapper = ORMMapper()
+        self.permission: CheckRolePermission = CheckRolePermission()
+        self.redis_idempotency = RedisIdempotency("sales-images-service-startup")
 
     async def enforce_daily_quota(self, user_id: uuid.UUID):
         today_start = (
@@ -44,17 +56,40 @@ class SaleListingImageService:
             raise HTTPException(status_code=429, detail="Daily upload limit reached")
 
     async def get_all_images(
-        self, listing_id: uuid.UUID, page: int = 1, per_page: int = 20
+        self, current_user, listing_id: uuid.UUID, page: int = 1, per_page: int = 20
     ):
-        cache_key = f"sale_listing:{listing_id}:images"
+        await self.permission.check_authenticated(current_user=current_user)
+        cache_key = f"sale_listing:{listing_id}:images{page}:{per_page}"
         cached = await cache.get_json(cache_key)
         if cached:
-            return cached
+            return self.mapper.many(items=cached, schema=BaseImageOut)
         images = await self.repo.get_all(listing_id)
-        image_dicts = [{"id": str(img.id), "url": img.image_path} for img in images]
-        paginated_images = self.paginate.paginate(image_dicts, page, per_page)
-        await cache.set_json(cache_key, paginated_images, ttl=300)
+        images_out = self.mapper.many(items=images, schema=BaseImageOut)
+        paginated_images = self.paginate.paginate(images_out, page, per_page)
+        await cache.set_json(
+            cache_key,
+            self.paginate.get_list_json_dumps(paginated_images),
+            ttl=300,
+        )
+
         return paginated_images
+
+    async def get_image(self, current_user, listing_id: uuid.UUID, image_id: uuid.UUID):
+        await self.permission.check_authenticated(current_user=current_user)
+        cache_key = f"sale_listing:{listing_id}:images{image_id}"
+        cached = await cache.get_json(cache_key)
+        if cached:
+            return self.mapper.one(item=cached, schema=BaseImageOut)
+        images = await self.repo.get_one_image(listing_id=listing_id, image_id=image_id)
+        images_out = self.mapper.one(item=images, schema=BaseImageOut)
+
+        await cache.set_json(
+            cache_key,
+            self.paginate.get_single_json_dumps(images_out),
+            ttl=300,
+        )
+
+        return images_out
 
     async def upload_image(
         self,
@@ -63,7 +98,8 @@ class SaleListingImageService:
         current_user,
         public_id: str,
     ):
-        async def handler():
+        async def _handler():
+            await self.permission.check_authenticated(current_user=current_user)
             await self.enforce_daily_quota(user_id=current_user.id)
             count = await self.repo.count_for_listing(listing_id)
 
@@ -85,21 +121,26 @@ class SaleListingImageService:
                 created_by_id=current_user.id,
                 sale_image_creator=current_user.id,
             )
-            await cache.delete_cache_keys_async(f"sale_listing:{listing_id}:images")
-
-            asyncio.create_task(
-                publish_event(
-                    "sale_listing.image.created",
-                    {
-                        "listing_id": str(listing_id),
-                        "image_id": str(image.id),
-                        "url": image.image_path,
-                    },
-                )
+            await cache.delete_cache_keys_async(
+                f"sale_listing:{listing_id}:images",
             )
+
+            await publish_event(
+                "sale_listing.image.created",
+                {
+                    "listing_id": str(listing_id),
+                    "image_id": str(image.id),
+                    "url": image.image_path,
+                },
+            )
+
             return {"id": str(image.id), "url": image.image_path}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=self.CREATE_LOCK_KEY,
+            coro=_handler,
+            ttl=300,
+        )
 
     async def _update_image_record(
         self,
@@ -108,7 +149,6 @@ class SaleListingImageService:
         secure_url: str,
         new_hash: str,
         public_id: str,
-        
     ):
         try:
             return await self.repo.update_one(
@@ -118,7 +158,7 @@ class SaleListingImageService:
                 new_public_id=public_id,
             )
         except Exception:
-            await self.repo.db.rollback()
+            await self.repo.db_rollback()
             await self._safe_delete_cloudinary(public_id=public_id)
             raise HTTPException(500, "Failed to update image")
 
@@ -128,9 +168,9 @@ class SaleListingImageService:
         secure_url: str,
         public_id: str,
         current_user,
-       
     ):
-        async def handler():
+        async def _handler():
+            await self.permission.check_authenticated(current_user=current_user)
             old_image = await self.repo.get_one(image_id)
             if not old_image:
                 raise HTTPException(status_code=404, detail="Image not found")
@@ -153,19 +193,26 @@ class SaleListingImageService:
                 secure_url=secure_url,
                 new_hash=new_hash,
                 public_id=public_id,
-                
             )
             await self._safe_delete_cloudinary(public_id=old_image.public_id)
             await cache.delete_cache_keys_async(
                 f"sale_listing:{old_image.listing_id}:images"
+                f"sale_listing:{old_image.listing_id}:images{old_image.id}"
             )
 
             return {"id": str(updated.id), "url": updated.image_path}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=self.UPDATE_LOCK_KEY,
+            coro=_handler,
+            ttl=300,
+        )
 
-    async def delete_image(self, image_id: uuid.UUID, current_user, resource_type:str="images"):
+    async def delete_image(
+        self, image_id: uuid.UUID, current_user, resource_type: str = "images"
+    ):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             image = await self.repo.get_one(image_id)
             if not image:
                 raise HTTPException(status_code=404, detail="Image not found")
@@ -186,13 +233,22 @@ class SaleListingImageService:
             await self.repo.delete_one(image_id)
             await cache.delete_cache_keys_async(
                 f"sale_listing:{image.listing_id}:images"
+                f"sale_listing:{image.listing_id}:images{image_id}"
             )
-            await self.cloudinary.delete_image(public_id=image.public_id, resource_type=resource_type)
+            await self.cloudinary.delete_image(
+                public_id=image.public_id, resource_type=resource_type
+            )
             return {"deleted": True, "id": str(image.id)}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=self.DELETE_LOCK_KEY,
+            coro=handler,
+            ttl=300,
+        )
 
-    async def _safe_delete_cloudinary(self, public_id: str, resource_type:str="images"):
+    async def _safe_delete_cloudinary(
+        self, public_id: str, resource_type: str = "images"
+    ):
         try:
             await self.cloudinary.delete_image(public_id, resource_type=resource_type)
         except Exception:

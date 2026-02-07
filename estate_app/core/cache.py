@@ -1,15 +1,15 @@
 import asyncio
-import json
 import base64
+import json
 import logging
 import urllib.parse
 from typing import Any, Optional
 
 import httpx
-from .settings import settings
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .breaker import breaker
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 

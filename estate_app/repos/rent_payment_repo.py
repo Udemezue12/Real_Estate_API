@@ -1,13 +1,12 @@
 import uuid
 from typing import Optional
-from fastapi import HTTPException
+
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import aliased, selectinload
 
 from models.enums import PDF_STATUS
 from models.models import Property, RentReceipt, Tenant
-from sqlalchemy import select, delete, or_
-
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload, aliased
 
 
 class RentReceiptRepo:
@@ -88,7 +87,7 @@ class RentReceiptRepo:
             select(RentReceipt)
             .options(
                 selectinload(RentReceipt.payment_proof),
-                selectinload(RentReceipt.tenant),
+                selectinload(RentReceipt.tenant).selectinload(Tenant.matched_user),
                 selectinload(RentReceipt.landlord),
                 selectinload(RentReceipt.property).selectinload(Property.owner),
                 selectinload(RentReceipt.property).selectinload(Property.state),
@@ -146,6 +145,8 @@ class RentReceiptRepo:
         self,
         tenant_id: uuid.UUID,
         property_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
     ) -> list[RentReceipt]:
         stmt = (
             select(RentReceipt)
@@ -163,14 +164,15 @@ class RentReceiptRepo:
                 RentReceipt.property_id == property_id,
             )
             .order_by(RentReceipt.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
     async def get_property_receipts(
-        self,
-        property_id: uuid.UUID,
+        self, property_id: uuid.UUID, page: int = 1, per_page: int = 20
     ) -> list[RentReceipt]:
         stmt = (
             select(RentReceipt)
@@ -187,6 +189,8 @@ class RentReceiptRepo:
                 RentReceipt.property_id == property_id,
             )
             .order_by(RentReceipt.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
 
         result = await self.db.execute(stmt)
@@ -290,10 +294,38 @@ class RentReceiptRepo:
             await self.db.rollback()
             raise
 
+    async def db_rollback(self):
+        await self.db.rollback()
+        
+
     async def db_commit_and_refresh(self, value):
         try:
             await self.db.commit()
             await self.db.refresh(value)
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise
+
+    async def get_unpaid_receipt_for_tenant(
+        self, tenant_id: uuid.UUID
+    ) -> RentReceipt | None:
+        result = await self.db.execute(
+            select(RentReceipt)
+            .where(RentReceipt.tenant_id == tenant_id, RentReceipt.fully_paid == False)
+            .order_by(RentReceipt.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def update_fully_paid(self, receipt_id: uuid.UUID, fully_paid: bool):
+        stmt = (
+            update(RentReceipt)
+            .where(RentReceipt.id == receipt_id)
+            .values(fully_paid=fully_paid)
+        )
+        try:
+            await self.db.execute(stmt)
+            await self.db.commit()
         except SQLAlchemyError:
             await self.db.rollback()
             raise

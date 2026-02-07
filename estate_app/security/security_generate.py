@@ -1,15 +1,16 @@
-import secrets
+import hashlib
+import hmac
 import re
+import secrets
 import uuid
 from random import randint
 
-from core.breaker import breaker
-import hashlib
-import hmac
-from core.settings import settings
+from fastapi import Request
 from itsdangerous import URLSafeTimedSerializer
 from redis.asyncio import Redis
-from fastapi import Request
+
+from core.breaker import breaker
+from core.settings import settings
 
 reset_serializer = URLSafeTimedSerializer(settings.RESET_SECRET_KEY)
 verify_serializer = URLSafeTimedSerializer(settings.VERIFY_EMAIL_SECRET_KEY)

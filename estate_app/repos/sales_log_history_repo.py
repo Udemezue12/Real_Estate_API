@@ -1,8 +1,9 @@
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
+
 from models.enums import ViewingStatus
 from models.models import SalesViewingHistory
-from sqlalchemy.exc import IntegrityError
 
 
 class SaleViewHistoryRepo:

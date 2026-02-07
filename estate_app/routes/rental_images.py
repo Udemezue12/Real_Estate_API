@@ -1,32 +1,43 @@
 import uuid
 
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
-from schemas.schema import CloudinaryUpdateRequest, CloudinaryUploadRequest
+from schemas.schema import (
+    BaseImageOut,
+    CloudinaryUpdateRequest,
+    CloudinaryUploadRequest,
+)
 from services.rental_images_service import RentalListingImageService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Upload Images"])
 
 
 @cbv(router)
 class RentalUploadImageRoutes:
-    @router.get("/{rental_listing_id}/get", dependencies=[rate_limit])
+    @router.get(
+        "/{rental_listing_id}/get",
+        dependencies=[rate_limit],
+        response_model=list[BaseImageOut],
+    )
     @safe_handler
     async def get(
         self,
         rental_listing_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentalListingImageService(db).get_all_images(
-            listing_id=rental_listing_id
+            listing_id=rental_listing_id, page=page, per_page=per_page
         )
 
     @router.post("/{rental_listing_id}/upload")

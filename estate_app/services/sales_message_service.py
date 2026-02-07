@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from fastapi import HTTPException
+
 from core.breaker import CircuitBreaker
 from core.cache import Cache
 from core.mapper import ORMMapper
 from core.paginate import PaginatePage
-from fastapi import HTTPException
 from models.enums import ViewingStatus
 from repos.sale_listing_repo import SaleListingRepo
 from repos.sales_conversation_repo import SaleConversationRepo
@@ -13,10 +14,10 @@ from repos.sales_encrypted_message import SaleEncryptedMessageRepository
 from repos.sales_log_history_repo import SaleViewHistoryRepo
 from schemas.schema import (
     CursorPage,
-    SaleConversationOut,
     EncryptedMessageOut,
     MessageCursorOut,
     MessageOut,
+    SaleConversationOut,
 )
 
 

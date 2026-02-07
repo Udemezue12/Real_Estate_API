@@ -3,11 +3,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
-from models.enums import RentCycle
-from models.models import Property, Tenant, User, RentReceipt
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
+
+from models.enums import RentCycle
+from models.models import Property, RentReceipt, Tenant, User
 
 
 class TenantRepo:
@@ -19,6 +20,60 @@ class TenantRepo:
             select(Tenant).where(Tenant.phone_number == phone_number)
         )
         return result.scalar_one_or_none()
+
+    async def check_tenant_property(
+        self, tenant_id: uuid.UUID, property_id: uuid.UUID
+    ) -> Optional[Tenant]:
+        stmt = (
+            select(Tenant)
+            .where(
+                Tenant.id == tenant_id,
+                Tenant.property_id == property_id,
+            )
+            .options(
+                selectinload(Tenant.rent_receipts).selectinload(
+                    RentReceipt.payment_proof
+                ),
+                selectinload(Tenant.property).selectinload(Property.managed_by),
+                selectinload(Tenant.property).selectinload(Property.state),
+                selectinload(Tenant.property).selectinload(Property.lga),
+                selectinload(Tenant.property).selectinload(Property.images),
+            )
+        )
+
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_all_tenants_ids(self, property_id: uuid.UUID) -> list[uuid.UUID]:
+        stmt = select(Tenant.id).where(
+            Tenant.property_id == property_id,
+            Tenant.matched_user_verified.is_(True),
+        )
+
+        result = await self.db.execute(stmt)
+
+        return result.scalars().all()
+
+    async def get_all_tenants(self, property_id: uuid.UUID) -> list[uuid.UUID]:
+        stmt = (
+            select(Tenant)
+            .where(
+                Tenant.property_id == property_id,
+                Tenant.matched_user_verified.is_(True),
+            )
+            .options(
+                selectinload(Tenant.rent_receipts).selectinload(
+                    RentReceipt.payment_proof
+                ),
+                selectinload(Tenant.property).selectinload(Property.managed_by),
+                selectinload(Tenant.property).selectinload(Property.state),
+                selectinload(Tenant.property).selectinload(Property.lga),
+                selectinload(Tenant.property).selectinload(Property.images),
+            )
+        )
+
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
 
     async def get_by_user(self, user_id: uuid.UUID) -> Tenant | None:
         stmt = select(Tenant).where(Tenant.matched_user_id == user_id)
@@ -116,6 +171,7 @@ class TenantRepo:
                 ),
             )
             .where(Tenant.property_id == property_id)
+            .order_by(Tenant.id)
             .offset(offset)
             .limit(limit)
         )
@@ -140,6 +196,7 @@ class TenantRepo:
                     RentReceipt.payment_proof
                 ),
             )
+            .order_by(Tenant.id)
             .offset(offset)
             .limit(limit)
         )
@@ -168,7 +225,6 @@ class TenantRepo:
                 selectinload(Tenant.rent_receipts).selectinload(
                     RentReceipt.payment_proof
                 ),
-               
                 selectinload(Tenant.property).selectinload(Property.managed_by),
                 selectinload(Tenant.property).selectinload(Property.state),
                 selectinload(Tenant.property).selectinload(Property.lga),
@@ -177,22 +233,6 @@ class TenantRepo:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
-
-    async def get_property(self, property_id: uuid.UUID) -> Property:
-        stmt = (
-            select(Property)
-            .where(Property.id == property_id)
-            .options(
-                selectinload(Property.managed_by),
-                selectinload(Property.state),
-                selectinload(Property.lga),
-                selectinload(Property.images),
-            )
-        )
-        result = await self.db.execute(stmt)
-        prop = result.scalar_one_or_none()
-
-        return prop
 
     async def find_unmatched_by_name(self, first_name, last_name, middle_name):
         stmt = select(Tenant).where(
@@ -203,6 +243,24 @@ class TenantRepo:
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
+
+    async def attach_user_to_many(self, tenants: list[Tenant], user: User):
+        try:
+            if not tenants:
+                return
+
+            for tenant in tenants:
+                if tenant.matched_user_id is None:
+                    tenant.matched_user_id = user.id
+                    tenant.phone_number = user.phone_number
+                    tenant.is_active = True
+                    tenant.matched_user_verified = True
+
+            await self.db.commit()
+
+        except IntegrityError:
+            await self.db.rollback()
+            raise
 
     async def attach_user(self, tenant: Tenant | None, user: User):
         try:
@@ -217,30 +275,45 @@ class TenantRepo:
             await self.db.rollback()
             raise
 
-    async def get_tenants_expiring_in(self, days: int) -> Tenant:
+    async def get_tenants_expiring_in(
+        self, days: int, offset: int = 0, limit: int = 20
+    ) -> Tenant:
         target_date = date.today() + timedelta(days=days)
 
         stmt = (
             select(Tenant)
             .where(Tenant.is_active == True)
             .where(Tenant.rent_expiry_date == target_date)
+            .order_by(Tenant.id)
+            .offset(offset)
+            .limit(limit)
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def get_expired_active_tenants(self):
+    async def get_expired_active_tenants(self, limit: int = 20, offset: int = 0):
         stmt = (
-            select(Tenant)
-            .where(Tenant.is_active == True)
-            .where(Tenant.rent_expiry_date < date.today())
+            (
+                select(Tenant)
+                .where(Tenant.is_active == True)
+                .where(Tenant.rent_expiry_date < date.today())
+            )
+            .order_by(Tenant.id)
+            .offset(offset)
+            .limit(limit)
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def deactivate(self, tenant: Tenant):
+    async def activate_or_deactivate(self, tenant_id: uuid.UUID, is_active: bool):
         try:
-            tenant.is_active = False
-            self.db.add(tenant)
+            stmt = (
+                update(Tenant).where(Tenant.id == tenant_id).values(is_active=is_active)
+            )
+            results = await self.db.execute(stmt)
+            await self.db_commit()
+            return results
+
         except SQLAlchemyError:
             await self.db.rollback()
             raise

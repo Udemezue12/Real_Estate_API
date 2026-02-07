@@ -8,25 +8,6 @@ from decimal import Decimal
 from typing import Awaitable, Callable, List, Optional, TypedDict, TypeVar
 
 import phonenumbers
-from core.get_db import Base
-from models.enums import (
-    RENT_PAYMENT_STATUS,
-    Furnishing,
-    GenderChoices,
-    HouseType,
-    PropertyTypes,
-    RentCycle,
-    NINVerificationProviders,
-    BVNVerificationProviders,
-    BVNStatus,
-    NINVerificationStatus,
-    ViewingStatus,
-    SOLD_BY,
-)
-from models.enums import (
-    UserRole as Role,
-)
-from models.utils import calculate_expiry
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -38,6 +19,27 @@ from pydantic import (
 )
 from typing_extensions import Annotated
 
+from core.get_db import Base
+from models.enums import (
+    RENT_PAYMENT_STATUS,
+    SOLD_BY,
+    BVNStatus,
+    BVNVerificationProviders,
+    Furnishing,
+    GenderChoices,
+    GlobalRole,
+    HouseType,
+    LetterType,
+    NINVerificationProviders,
+    NINVerificationStatus,
+    PaymentProvider,
+    PropertyTypes,
+    RentCycle,
+    ViewingStatus,
+)
+from models.enums import UserRole as Role
+from models.utils import calculate_expiry
+
 ModelT = TypeVar("ModelT", bound=Base)
 EventPublishHook = Callable[[ModelT, uuid.UUID], Awaitable[None]]
 
@@ -45,7 +47,7 @@ EventPublishHook = Callable[[ModelT, uuid.UUID], Awaitable[None]]
 class UserBase(BaseModel):
     email: EmailStr
     username: str
-    role: Role
+    role: GlobalRole
 
     @field_validator("username")
     @classmethod
@@ -60,6 +62,13 @@ class UserBase(BaseModel):
     @classmethod
     def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v):
+        if v is not None and v not in Role:
+            raise ValueError("Invalid role choice")
+        return v
 
 
 class UserCreate(UserBase):
@@ -186,18 +195,54 @@ class UserProfileSchema(BaseModel):
     public_id: str
     nin: str
     bvn: str
+    account_number: str
+    bank_name: str
     profile_pic_path: str
     nin_verification_provider: NINVerificationProviders
+    bvn_verification_provider: BVNVerificationProviders
+
+    @field_validator("nin_verification_provider")
+    @classmethod
+    def validate_nin_provider(cls, v):
+        if v is not None and v not in NINVerificationProviders:
+            raise ValueError("Invalid Nin Verification provider")
+        return v
+
+    @field_validator("bvn_verification_provider")
+    @classmethod
+    def validate_bvn_provider(cls, v):
+        if v is not None and v not in BVNVerificationProviders:
+            raise ValueError("Invalid BVN  Verification provider")
+        return v
 
 
 class ReVerifyNin(BaseModel):
     nin: str
     nin_verification_provider: NINVerificationProviders
 
+    @field_validator("nin_verification_provider")
+    @classmethod
+    def validate_nin_provider(cls, v):
+        if v is not None and v not in NINVerificationProviders:
+            raise ValueError("Invalid Nin Verification provider")
+        return v
+
 
 class ReVerifyBVN(BaseModel):
     bvn: str
     bvn_verification_provider: BVNVerificationProviders
+
+    @field_validator("bvn_verification_provider")
+    @classmethod
+    def validate_bvn_provider(cls, v):
+        if v is not None and v not in BVNVerificationProviders:
+            raise ValueError("Invalid BVN  Verification provider")
+        return v
+
+
+class ReVerifyAccountNumber(BaseModel):
+    account_number: str
+    bank_code: str
 
 
 class UserProfileSchemaOut(BaseModel):
@@ -248,6 +293,11 @@ class CloudinaryPDFUploadRequest(BaseModel):
     public_id: str
 
 
+class RentPoofSchema(CloudinaryPDFUploadRequest):
+    property_id: uuid.UUID
+    amount_paid: Decimal
+
+
 class CloudinaryUpdateRequest(BaseModel):
     secure_url: str
     public_id: str
@@ -262,6 +312,13 @@ class UploadImageResponse(BaseModel):
 class MarkAsSoldSchema(BaseModel):
     sold_by: SOLD_BY
 
+    @field_validator("sold_by")
+    @classmethod
+    def validate_sold_by(cls, v):
+        if v is not None and v not in SOLD_BY:
+            raise ValueError("Not allowed")
+        return v
+
 
 class PropertyBase(BaseModel):
     title: str = Field(..., max_length=255)
@@ -274,21 +331,56 @@ class PropertyBase(BaseModel):
     default_rent_amount: Optional[int]
     default_rent_cycle: Optional[RentCycle]
 
-    house_type: HouseType  # replace with your Enum
-    property_type: PropertyTypes  # replace with your Enum
+    house_type: HouseType
+    property_type: PropertyTypes
 
     square_meters: Optional[int]
     is_owner: bool = True
     is_manager: bool = False
-    managed_by_id: Optional[uuid.UUID]
+    managed_by_id: Optional[uuid.UUID] = None
     state_id: uuid.UUID
     lga_id: uuid.UUID
+
+    @field_validator("property_type")
+    @classmethod
+    def validate_property_type(cls, v):
+        if v is not None and v not in PropertyTypes:
+            raise ValueError("Invalid Property Type")
+        return v
+
+    @field_validator("house_type")
+    @classmethod
+    def validate_house_type(cls, v):
+        if v is not None and v not in HouseType:
+            raise ValueError("Invalid House Type")
+        return v
 
     @field_validator("default_rent_amount")
     @classmethod
     def validate_rent(cls, v):
         if v is not None and v <= 0:
             raise ValueError("Rent must be positive.")
+        return v
+
+    @field_validator("lga_id")
+    @classmethod
+    def validate_lga(cls, v):
+        if not v:
+            raise ValueError("LGA ID is required.")
+        return v
+
+    @field_validator("state_id")
+    @classmethod
+    def validate_state(cls, v):
+        if not v:
+            raise ValueError("State ID is required.")
+        return v
+
+    @field_validator("default_rent_cycle")
+    @classmethod
+    def validate_rent_cycle(cls, v):
+        if v is not None and v not in RentCycle:
+            raise ValueError("Invalid rent cycle.")
         return v
 
     @field_validator("is_manager")
@@ -459,13 +551,20 @@ class EffectiveRent(TypedDict):
 
 class TenantBase(BaseModel):
     rent_amount: Optional[Decimal] = None
-    rent_cycle: Optional[RentCycle] = None
+    # rent_cycle: Optional[RentCycle] = None
     rent_start_date: date
 
     first_name: str = Field(..., min_length=5)
     middle_name: str = Field(..., min_length=5)
     last_name: str = Field(..., min_length=5)
     matched_user_name: str | None = None
+
+    @field_validator("rent_amount")
+    @classmethod
+    def validate_rent(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("Rent must be positive.")
+        return v
 
     @model_validator(mode="before")
     @classmethod
@@ -489,14 +588,6 @@ class TenantBase(BaseModel):
     def capitalize_names(cls, value: str):
         return value.strip().title()
 
-    @field_validator("rent_amount")
-    @classmethod
-    def amount_must_be_positive(cls, v):
-        if v is not None and v < 0:
-            raise ValueError("rent_amount must be positive")
-        return v
-
-    # ---------------------------------------------------------
     @model_validator(mode="after")
     def validate_dates(self):
         if not self.rent_start_date:
@@ -622,7 +713,6 @@ class SalesListingSchema(BaseModel):
     lga_id: Optional[uuid.UUID]
 
     is_available: bool
-    is_verified: bool
 
     @field_validator("price")
     @classmethod
@@ -631,7 +721,6 @@ class SalesListingSchema(BaseModel):
             raise ValueError("Price must be greater than 10,000")
         return v
 
-    # ✅ PLOT SIZE validation (useful & realistic)
     @field_validator("plot_size")
     @classmethod
     def validate_plot_size(cls, v: Decimal):
@@ -644,17 +733,26 @@ class SalesListingUpdateSchema(BaseModel):
     price: Decimal | None = None
     plot_size: Decimal | None = None
     parking_spaces: int | None = None
-
     title: str | None = None
-    address: str | None = None
     description: str | None = None
-    parking_spaces: int | None = None
+    address: str | None = None
+    
+    bathrooms: int | None = None
+    toilets: int | None = None
+    state_id: uuid.UUID | None = None
+    lga_id: uuid.UUID | None = None
+    
+    contact_phone: str | None = None
+    
 
-    state_id: Optional[uuid.UUID] = None
-    lga_id: Optional[uuid.UUID] = None
-
-    is_available: bool | None = None
-    is_verified: bool | None = None
+    @field_validator("parking_spaces")
+    @classmethod
+    def validate_parking_spaces(cls, v: int):
+        if v < 0:
+            raise ValueError("Parking spaces cannot be negative")
+        if v > 15:
+            raise ValueError("Parking spaces limit exceeded")
+        return v
 
     @field_validator("price")
     @classmethod
@@ -678,6 +776,7 @@ class RentalListingSchema(BaseModel):
     has_electricity: bool
     rent_amount: Decimal
     rent_cycle: RentCycle
+    rent_duration: RentCycle
     title: str
     address: str
     description: str
@@ -691,6 +790,30 @@ class RentalListingSchema(BaseModel):
     slug: Optional[str]
     expires_at: Optional[datetime]
     furnished_level: Furnishing
+    bathrooms: int
+    toilets: int
+    rooms: int
+
+    @field_validator("property_type")
+    @classmethod
+    def validate_property_type(cls, v):
+        if v is not None and v not in PropertyTypes:
+            raise ValueError("Invalid Property Type")
+        return v
+
+    @field_validator("house_type")
+    @classmethod
+    def validate_house_type(cls, v):
+        if v is not None and v not in HouseType:
+            raise ValueError("Invalid House Type")
+        return v
+
+    @field_validator("furnished_level")
+    @classmethod
+    def validate_furnishing_type(cls, v):
+        if v is not None and v not in Furnishing:
+            raise ValueError("Invalid Furnishing Level")
+        return v
 
     @field_validator("description", "title", "address", "slug", mode="before")
     @classmethod
@@ -700,8 +823,11 @@ class RentalListingSchema(BaseModel):
     @field_validator("rent_amount", mode="before")
     @classmethod
     def validate_price(cls, v: Decimal):
-        if v <= 10:
-            raise ValueError("Price must be greater than 10")
+        if v <= 5000:
+            raise ValueError("Price must be greater than 5000")
+        if v >= 50_000_000:
+            raise ValueError("Price limit exceeded")
+
         return v
 
     @field_validator("parking_spaces", mode="before")
@@ -709,12 +835,19 @@ class RentalListingSchema(BaseModel):
     def validate_parking_spaces(cls, v: int):
         if v < 0:
             raise ValueError("Parking spaces cannot be negative")
+        if v > 15:
+            raise ValueError("Parking spaces limit exceeded")
         return v
 
-    @field_validator("expires_at", mode="before")
+    @field_validator("expires_at", mode="after")
     @classmethod
     def validate_expiry(cls, v: Optional[datetime]):
-        if v and v <= datetime.now(timezone.utc):
+        if v is None:
+            return v
+        # Convert naive datetime to UTC
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        if v <= datetime.now(timezone.utc):
             raise ValueError("Expiry date must be in the future")
         return v
 
@@ -748,8 +881,6 @@ class RentalListingUpdateSchema(BaseModel):
     parking_spaces: int | None = None
     state_id: uuid.UUID | None = None
     lga_id: uuid.UUID | None = None
-    is_available: bool | None = None
-    is_verified: bool | None = None
     house_type: HouseType | None = None
     property_type: PropertyTypes | None = None
     slug: str | None = None
@@ -778,11 +909,14 @@ class RentalListingUpdateSchema(BaseModel):
                 raise ValueError("Parking spaces cannot be negative")
             return v
 
-    @field_validator("expires_at", mode="before")
+    @field_validator("expires_at", mode="after")
     @classmethod
     def validate_expiry(cls, v: Optional[datetime]):
         if v is not None:
-            if v and v <= datetime.now(timezone.utc):
+            # Convert naive datetime to UTC
+            if v.tzinfo is None:
+                v = v.replace(tzinfo=timezone.utc)
+            if v <= datetime.now(timezone.utc):
                 raise ValueError("Expiry date must be in the future")
             return v
 
@@ -877,14 +1011,15 @@ class PaginatedSalesListing(BaseModel):
     total: int
 
 
-class MarkAsPaid(BaseModel):
-    rent_amount: Optional[Decimal] = None
+class RejectProofSchema(BaseModel):
+    reason: str
 
 
 class RentProofBaseOut(BaseModel):
     id: uuid.UUID
     file_path: str
     status: RENT_PAYMENT_STATUS
+    uploaded_at: datetime
     model_config = {"from_attributes": True}
 
 
@@ -929,7 +1064,7 @@ class MultiUploadRequest(BaseModel):
 
 class UploadDeleteRequest(BaseModel):
     public_ids: List[str]
-    resource_type: str
+   
 
 
 class UploadSingleDeleteRequest(BaseModel):
@@ -982,6 +1117,13 @@ class RentalConversationOut(BaseModel):
     viewing_date: Optional[datetime]
     viewing_status: ViewingStatus
 
+    @field_validator("viewing_status")
+    @classmethod
+    def validate_status_provider_type(cls, v):
+        if v is not None and v not in ViewingStatus:
+            raise ValueError("Invalid")
+        return v
+
     model_config = {"from_attributes": True}
 
 
@@ -1017,4 +1159,91 @@ class MessageCursorOut(MessageOut):
 class CursorPage(BaseModel):
     items: list[MessageCursorOut]
     next_cursor: datetime | None
+    model_config = {"from_attributes": True}
+
+
+class RentPaymentSchema(BaseModel):
+    property_id: uuid.UUID
+    payment_provider: PaymentProvider
+    currency: str = "NGN"
+
+    @field_validator("payment_provider")
+    @classmethod
+    def validate_payment_provider_type(cls, v):
+        if v is not None and v not in PaymentProvider:
+            raise ValueError("Invalid Property Type")
+        return v
+
+
+class RentPaymentVerifySchema(BaseModel):
+    reference: str
+
+
+class RentPaymentRefundSchema(BaseModel):
+    payment_id: int
+
+
+class BankOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    model_config = {"from_attributes": True}
+
+
+class BaseImageOut(BaseModel):
+    id: uuid.UUID
+    image_path: str
+
+
+class LetterWithTenantWithPropertyOut:
+    id: uuid.UUID
+    is_read: bool
+    created_at: datetime
+    tenant: Optional[TenantBaseOut] = None
+    property: Optional[PropertyBaseOut] = None
+    letter: list["LetterSchemaOut"] = []
+    model_config = {"from_attributes": True}
+
+
+class LetterRecipientOut(BaseModel):
+    id: uuid.UUID
+    is_read: bool
+    created_at: datetime
+    letter: LetterSchemaOut
+    model_config = {"from_attributes": True}
+
+
+class LetterUploadWithPDFSchema(BaseModel):
+    file_path: str
+    public_id: str
+    letter_type: LetterType
+    title: str
+
+    @field_validator("letter_type")
+    @classmethod
+    def validate_letter_type(cls, v):
+        if v is not None and v not in LetterType:
+            raise ValueError("Invalid role choice")
+        return v
+
+
+class LetterUploadWithoutPDFSchema(BaseModel):
+    letter_type: LetterType
+    title: str
+    body: str
+
+    @field_validator("letter_type")
+    @classmethod
+    def validate_letter_type(cls, v):
+        if v is not None and v not in LetterType:
+            raise ValueError("Invalid role choice")
+        return v
+
+
+class LetterSchemaOut(BaseModel):
+    body: str | None = None
+    file_path: str | None = None
+    public_id: Optional[str] = None
+    letter_type: LetterType
+    title: str
+    created_at: datetime
     model_config = {"from_attributes": True}

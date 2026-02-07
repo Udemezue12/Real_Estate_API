@@ -1,11 +1,12 @@
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from models.enums import ViewingStatus
 from models.models import RentalConversation, RentalListing
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 class RentalConversationRepo:
@@ -82,11 +83,17 @@ class RentalConversationRepo:
         return result.scalar_one_or_none()
 
     async def list_conversations_for_user(
-        self, user_id: UUID
+        self, user_id: UUID, page: int = 1, per_page: int = 20
     ) -> list[RentalConversation]:
-        stmt = select(RentalConversation).where(
-            (RentalConversation.renter_id == user_id)
-            | (RentalConversation.owner_id == user_id)
+        stmt = (
+            select(RentalConversation)
+            .where(
+                (RentalConversation.renter_id == user_id)
+                | (RentalConversation.owner_id == user_id)
+            )
+            .order_by(RentalConversation.updated_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -104,6 +111,17 @@ class RentalConversationRepo:
         except SQLAlchemyError as e:
             await self.db.rollback()
             raise e
+
+    async def get_pending_conversations(self) -> List[RentalConversation]:
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+
+        stmt = select(RentalConversation).where(
+            RentalConversation.viewing_status == ViewingStatus.PENDING,
+            RentalConversation.updated_at < cutoff,
+        )
+        result = await self.db.execute(stmt)
+        convos: List[RentalConversation] = result.scalars().all()
+        return convos
 
     # async def update_conversation_last_message(
     #     self, conversation_id: UUID, last_message: str

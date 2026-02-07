@@ -3,17 +3,8 @@ import uuid
 from base64 import b64decode, urlsafe_b64decode
 
 import jwt
-from core.base_code import base64url_encode
-from core.breaker import breaker
-from core.cache import Cache
-from core.mapper import ORMMapper
-from core.paginate import PaginatePage
-from core.settings import settings
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
-from repos.auth_repo import AuthRepo
-from repos.passkey_repo import PasskeyRepo
-from schemas.schema import CredentialAttestationOut
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
@@ -27,6 +18,17 @@ from webauthn.helpers.structs import (
     ResidentKeyRequirement,
     UserVerificationRequirement,
 )
+
+from core.base_code import base64url_encode
+from core.breaker import breaker
+from core.cache import Cache
+from core.check_permission import CheckRolePermission
+from core.mapper import ORMMapper
+from core.paginate import PaginatePage
+from core.settings import settings
+from repos.auth_repo import AuthRepo
+from repos.passkey_repo import PasskeyRepo
+from schemas.schema import CredentialAttestationOut
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
@@ -44,6 +46,7 @@ class PasskeyService:
         self.mapper: ORMMapper = ORMMapper()
         self.cache: Cache = Cache()
         self.paginate: PaginatePage = PaginatePage()
+        self.permission: CheckRolePermission = CheckRolePermission()
 
     async def complete_passkey_registration(
         self, registration_response: dict, current_user
@@ -131,6 +134,7 @@ class PasskeyService:
 
     async def start_passkey_registration(self, current_user):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             options = generate_registration_options(
                 rp_id=settings.RP_ID,
                 rp_name=settings.PROJECT_NAME,
@@ -181,8 +185,10 @@ class PasskeyService:
 
         return await breaker.call(handler)
 
-    async def get_registered_passkeys(self, user_id):
+    async def get_registered_passkeys(self, current_user):
         async def handler():
+            user_id = current_user.id
+            await self.permission.check_authenticated(current_user=current_user)
             credentials = await self.repo.get_registered_passkeys(user_id=user_id)
             return [
                 {
@@ -321,6 +327,15 @@ class PasskeyService:
     async def delete(self, current_user, passkey_id: uuid.UUID):
         async def handler():
             user_id = current_user.id
+            await self.permission.check_authenticated(current_user=current_user)
+            passkey = await self.repo.get_passkey_by_id_for_user(
+                user_id=user_id, passkey_id=passkey_id
+            )
+            if not passkey:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Passkey not found for this user",
+                )
             await self.repo.delete_passkey_by_id(user_id=user_id, passkey_id=passkey_id)
             await self.cache.delete_cache_keys_async(
                 f"passkey::{user_id}:{passkey_id}", f"passkey::{user_id}"
@@ -331,6 +346,7 @@ class PasskeyService:
 
     async def get_passkey_by_id(self, current_user, passkey_id: uuid.UUID):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             cache_key = f"passkey::{current_user.id}:{passkey_id}"
             cached = await self.cache.get_json(cache_key)
             if cached is not None:
@@ -355,6 +371,7 @@ class PasskeyService:
 
     async def get_passkeys(self, current_user, page: int = 1, per_page: int = 20):
         async def handler():
+            await self.permission.check_authenticated(current_user=current_user)
             cache_key = f"passkey::{current_user.id}:page:{page}:per:{per_page}"
             cached = await self.cache.get_json(cache_key)
             if cached is not None:

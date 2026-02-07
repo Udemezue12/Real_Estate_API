@@ -1,9 +1,10 @@
 from uuid import UUID
 
 from fastapi import WebSocket
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from models.models import SaleConversation
 from realtime.connection_manager import ConnectionManager
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .message_repo import SaleEncryptedMessageRepo
 

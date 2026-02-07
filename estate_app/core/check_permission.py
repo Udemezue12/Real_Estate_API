@@ -3,29 +3,32 @@ from models.enums import UserRole
 
 
 class CheckRolePermission:
-    async def check_landlord(self, current_user):
-        if current_user.role.name != UserRole.LANDLORD:
-            raise HTTPException(status_code=403, detail="Access Denied.")
-
-    async def check_tenant(self, current_user):
-        if current_user.role.name != UserRole.TENANT:
-            raise HTTPException(status_code=403, detail="Access Denied.")
-
-    async def check_lawyer(self, current_user):
-        if current_user.role.name != UserRole.LAWYER:
-            raise HTTPException(status_code=403, detail="Access Denied.")
-
-    async def check_caretaker(self, current_user):
-        if current_user.role.name != UserRole.CARETAKER:
-            raise HTTPException(status_code=403, detail="Access Denied.")
-
-    async def check_agent(self, current_user):
-        if current_user.role.name != UserRole.AGENT:
-            raise HTTPException(status_code=403, detail="Access Denied.")
-
-    async def check_landlord_or_admin(self, current_user):
-        if current_user.role.name not in {"Admin", "Landlord"}:
-            raise HTTPException(status_code=403, detail="Access Denied")
     async def check_admin(self, current_user):
-        if current_user.role.name != UserRole.ADMIN:
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Access Denied.")
+
+    async def check_authenticated(self, current_user):
+        if current_user.role not in {
+            UserRole.ADMIN,
+            UserRole.USER,
+            UserRole.LANDLORD,
+            UserRole.TENANT,
+        }:
             raise HTTPException(status_code=403, detail="Access Denied")
+    async def check_login(self, current_user):
+        if current_user.role in {
+            UserRole.ADMIN,
+            UserRole.USER,
+            UserRole.LANDLORD,
+            UserRole.TENANT,
+        }:
+            raise HTTPException(status_code=403, detail="Already Logged In")
+
+    async def check_role(self, role: UserRole):
+        if role not in {
+            UserRole.ADMIN,
+            UserRole.USER,
+            UserRole.LANDLORD,
+            UserRole.TENANT,
+        }:
+            raise HTTPException(status_code=403, detail="Invalid Role")

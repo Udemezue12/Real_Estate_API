@@ -1,23 +1,31 @@
-import asyncio
+import uuid
 from datetime import datetime, timezone
 from typing import List
-import uuid
-from schemas.schema import LgaSchema, StateSchema
-from core.breaker import breaker
-from core.check_permission import CheckRolePermission
-from core.paginate import PaginatePage
-from core.cache import cache
-from core.event_publish import publish_event
+
 from fastapi import HTTPException
-from repos.state_repos import StateRepo
+from geoalchemy2.shape import from_shape
+
+from core.breaker import breaker
+from core.cache import cache
+from core.check_permission import CheckRolePermission
+from core.event_publish import publish_event
+from core.geoapify import geocode_address
+from core.paginate import PaginatePage
+from core.redis_idempotency import RedisIdempotency
 from models.shape import convert_location
+from repos.state_repos import StateRepo
+from schemas.schema import LgaSchema, StateSchema
+from states_lists.states import STATES
 
 
 class StateService:
+    LOCK_KEY = "states:sync:v12"
+
     def __init__(self, db):
         self.repo: StateRepo = StateRepo(db)
         self.paginate: PaginatePage = PaginatePage()
         self.permission: CheckRolePermission = CheckRolePermission()
+        self.idempotency = RedisIdempotency(namespace="states-service-startup")
 
     async def get_states(self, page: int = 1, per_page: int = 20) -> List[dict]:
         async def handler():
@@ -100,36 +108,40 @@ class StateService:
 
     async def create_state(
         self,
-        name: str,
     ):
-        async def handler():
-            if await self.repo.get_name(name=name):
-                raise HTTPException(status_code=400, detail="Name already taken")
+        # async def _sync():
+            print("Starting state sync...")
 
-            state = await self.repo.create(
-                name=name,
-            )
-            state_name = state.name
+            for item in STATES:
+                raw_name = item["name"].strip()
+                point = await geocode_address(raw_name)
+                geom = from_shape(point, srid=4326)
 
-            asyncio.create_task(
-                publish_event(
-                    "state.created",
-                    {
-                        "state_id": str(state.id),
-                        "name": state_name,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    },
-                ),
-            )
+                state, created = await self.repo.create_or_get(name=raw_name, geom=geom)
+                await self.repo.db_commit()
+
+                if created:
+                    await publish_event(
+                        "state.created",
+                        {
+                            "state_id": str(state.id),
+                            "name": state.name,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
+
             await cache.delete_cache_keys_async(
-                f"state:{state_name}",
-                "state_name:single_state",
                 "states:list",
                 "states:with_lgas",
             )
-            return state.as_dict()
 
-        return await breaker.call(handler)
+            print("State sync completed")
+
+        # await self.idempotency.run_once(
+        #     key=self.LOCK_KEY,
+        #     coro=_sync,
+        #     ttl=120,
+        # )
 
     async def update_state(
         self, current_user, state_id: uuid.UUID, new_name: str | None = None
@@ -142,8 +154,8 @@ class StateService:
             )
             state_name = state.name
 
-            asyncio.create_task(
-                publish_event(
+            (
+                await publish_event(
                     "state.updated",
                     {
                         "state_id": str(state.id),
@@ -183,8 +195,8 @@ class StateService:
                 "states:list",
                 "states:with_lgas",
             )
-            asyncio.create_task(
-                publish_event(
+            (
+                await publish_event(
                     "state.deleted",
                     {
                         "state_id": deleted.id,

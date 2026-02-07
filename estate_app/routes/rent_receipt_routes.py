@@ -1,18 +1,17 @@
 import uuid
 
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
-from core.idempotency_provider import get_idem_key
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
-from schemas.schema import RentReceiptBaseOut, MarkAsPaid
+from schemas.schema import RejectProofSchema, RentReceiptBaseOut
 from services.rent_receipt_service import RentReceiptService
-from sqlalchemy.ext.asyncio import AsyncSession
-
 
 router = APIRouter(tags=["Rent Receipts"])
 
@@ -24,14 +23,27 @@ class RentReceiptRoutes:
     async def mark_as_paid(
         self,
         proof_id: uuid.UUID,
-        data:MarkAsPaid,
         db: AsyncSession = Depends(get_db_async),
-        idem_key: str = Depends(get_idem_key),
         current_user: User = Depends(get_current_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).mark_as_paid(
-            current_user=current_user, proof_id=proof_id, idem_key=idem_key, data=data
+            current_user=current_user,
+            proof_id=proof_id,
+        )
+
+    @router.post("/{proof_id}/reject_proof", dependencies=[rate_limit])
+    @safe_handler
+    async def reject_proof(
+        self,
+        proof_id: uuid.UUID,
+        data: RejectProofSchema,
+        db: AsyncSession = Depends(get_db_async),
+        current_user: User = Depends(get_current_user),
+        _: None = Depends(validate_csrf_dependency),
+    ):
+        return await RentReceiptService(db).reject_proof(
+            current_user=current_user, proof_id=proof_id, data=data
         )
 
     @router.get("/{receipt_id}/download", dependencies=[rate_limit])

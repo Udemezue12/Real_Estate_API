@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from models.models import RentalEncryptedMessage
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
+
+from models.models import RentalEncryptedMessage
 
 
 class RentalEncryptedMessageRepository:

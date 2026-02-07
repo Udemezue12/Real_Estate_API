@@ -1,88 +1,38 @@
-import asyncio
 import logging
 import uuid
 
 import httpx
+from asyncio import run as async_run
+
+from celery import shared_task
+
 from core.get_db import AsyncSessionLocal
-from core.name_matcher import NameMatcher
-from models.enums import NINVerificationProviders, NINVerificationStatus
-from repos.profile_repo import UserProfileRepo
-from sqlalchemy.ext.asyncio import AsyncSession
-from verify_nin.verify_nin_qoreID import QoreIDVerifyyNin
+from models.enums import NINVerificationProviders
+from services.verification_service import VerificationService
 
 logger = logging.getLogger("nin.qoreid")
 
 
-def create_qoreid_nin_task(app):
-    class QoreIDNINTask(app.Task):
-        name = "verify_nin_qoreid"
+@shared_task(
+    name="verify_nin_qoreid",
+    autoretry_for=(httpx.HTTPError, ConnectionError, RuntimeError),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def create_qoreid_nin_task(profile_id: str, nin: str):
+    profile_uuid = uuid.UUID(profile_id)
 
-        autoretry_for = (RuntimeError, ConnectionError, httpx.HTTPError)
-        retry_backoff = True
-        retry_jitter = True
-        max_retries = 3
-        default_retry_delay = 10
+    if not profile_uuid:
+        raise ValueError("Invalid profile_id")
+    return async_run(verify_nin(profile_uuid, nin))
 
-        def _run_async(self, coro):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(coro)
-            finally:
-                loop.close()
 
-        async def _verify_nin(
-            self, session: AsyncSession, profile_id: uuid.UUID, nin: str
-        ):
-            repo = UserProfileRepo(session)
-            call_qoreid = QoreIDVerifyyNin()
-            name_matcher = NameMatcher()
-            try:
-                profile = await repo.get_profile(profile_id=profile_id)
-                if profile.nin_verification_status == NINVerificationStatus.VERIFIED:
-                    logger.info("Profile %s already verified")
-                    return
-                result = await call_qoreid.verify_nin(nin)
+async def verify_nin(profile_id: uuid.UUID, nin: str):
+    async with AsyncSessionLocal() as db:
+        return await VerificationService(db).verify_nin(
+            profile_id=profile_id,
+            nin=nin,
+            nin_verification_provider=NINVerificationProviders.QORE_ID,
+        )
 
-                if not result.get("verified"):
-                    await repo.mark_nin_verification_failed(
-                        profile_id=profile_id, nin_error="NIN verification failed"
-                    )
-                    return
 
-                if not await name_matcher.names_match(
-                    user=profile.user,
-                    first_name=result["first_name"],
-                    last_name=result["last_name"],
-                ):
-                    await repo.mark_nin_verification_failed(
-                        profile_id=profile_id,
-                        nin_error="NIN verification failed due to name not matching",
-                    )
-                    return
-                await repo.mark_nin_verified(
-                    profile_id=profile_id,
-                    nin_verification_provider=NINVerificationProviders.QORE_ID,
-                )
-                logger.info("NIN verified successfully for profile %s")
-
-            except Exception as e:
-                logger.exception("NIN verification error for %s", str(e))
-                await repo.mark_nin_verification_failed(
-                    profile_id=profile_id,
-                    nin_error="NIN verification Error",
-                )
-                raise
-
-        def run(self, profile_id: uuid.UUID, nin: str):
-            async def _runner():
-                async with AsyncSessionLocal() as session:
-                    await self._verify_nin(
-                        session=session,
-                        profile_id=profile_id,
-                        nin=nin,
-                    )
-
-            return self._run_async(_runner())
-
-    return QoreIDNINTask

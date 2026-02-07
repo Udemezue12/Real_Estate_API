@@ -1,16 +1,23 @@
 import uuid
 from typing import List
+
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
-from schemas.schema import SalesListingOut, SalesListingSchema,SalesListingUpdateSchema,MarkAsSoldSchema
+from schemas.schema import (
+    MarkAsSoldSchema,
+    SalesListingOut,
+    SalesListingSchema,
+    SalesListingUpdateSchema,
+)
 from services.sale_listing_service import SaleListingService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Property Listing For Sale"])
 
@@ -31,6 +38,7 @@ class SalesRoutes:
         _: None = Depends(validate_csrf_dependency),
     ):
         return await SaleListingService(db).get_all_listings(page, per_page)
+
     @router.get(
         "/sold",
         dependencies=[rate_limit],
@@ -45,10 +53,14 @@ class SalesRoutes:
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
-        return await SaleListingService(db).get_sold_properties(current_user=current_user, page=page, per_page=per_page)
+        return await SaleListingService(db).get_all_sold_listings(
+            current_user=current_user, page=page, per_page=per_page
+        )
 
     @router.get(
-        "/listings/{listing_id}/get", dependencies=[rate_limit], response_model=SalesListingOut
+        "/listings/{listing_id}/get",
+        dependencies=[rate_limit],
+        response_model=SalesListingOut,
     )
     @safe_handler
     async def get(
@@ -78,7 +90,9 @@ class SalesRoutes:
         )
 
     @router.get(
-        "/lgas/{lga_id}/get", dependencies=[rate_limit], response_model=List[SalesListingOut]
+        "/lgas/{lga_id}/get",
+        dependencies=[rate_limit],
+        response_model=List[SalesListingOut],
     )
     @safe_handler
     async def get_all_by_lga(
@@ -89,7 +103,9 @@ class SalesRoutes:
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
-        return await SaleListingService(db).get_properties_by_lga(lga_id=lga_id, page=page, per_page=per_page)
+        return await SaleListingService(db).get_properties_by_lga(
+            lga_id=lga_id, page=page, per_page=per_page
+        )
 
     @router.post("/create", dependencies=[rate_limit], response_model=SalesListingOut)
     @safe_handler
@@ -103,7 +119,12 @@ class SalesRoutes:
         return await SaleListingService(db).create_listing(
             data=data, current_user=current_user
         )
-    @router.patch("/{listing_id}/update", dependencies=[rate_limit], response_model=SalesListingOut)
+
+    @router.patch(
+        "/{listing_id}/update",
+        dependencies=[rate_limit],
+        response_model=SalesListingOut,
+    )
     @safe_handler
     async def update(
         self,
@@ -116,6 +137,7 @@ class SalesRoutes:
         return await SaleListingService(db).update_listing(
             data=data, current_user=current_user, listing_id=listing_id
         )
+
     @router.post("/{listing_id}/mark_as_sold", dependencies=[rate_limit])
     @safe_handler
     async def mark_as_sold(
@@ -130,6 +152,8 @@ class SalesRoutes:
             data=data, current_user=current_user, listing_id=listing_id
         )
 
+    
+
     @router.delete("/{listing_id}/delete", dependencies=[rate_limit])
     @safe_handler
     async def delete(
@@ -141,4 +165,17 @@ class SalesRoutes:
     ):
         return await SaleListingService(db).delete_listing(
             listing_id=listing_id, current_user=current_user
+        )
+
+    @router.post("/{listing_id}/verify", dependencies=[rate_limit])
+    @safe_handler
+    async def verify_property(
+        self,
+        listing_id: uuid.UUID,
+        db: AsyncSession = Depends(get_db_async),
+        current_user: User = Depends(get_current_user),
+        _: None = Depends(validate_csrf_dependency),
+    ):
+        return await SaleListingService(db).mark_as_verified(
+            current_user=current_user, property_id=listing_id
         )

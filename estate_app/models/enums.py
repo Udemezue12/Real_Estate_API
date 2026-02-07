@@ -9,9 +9,28 @@ class UserRole(str, Enum):
     AGENT = "Agent"
     SELLER = "Seller"
     ADMIN = "Admin"
+    USER = "User"
+
+
+class GlobalRole(str, Enum):
+    USER = "User"
+    LANDLORD = "Landlord"
 
 
 class NINVerificationStatus(str, Enum):
+    PENDING = "Pending"
+    VERIFIED = "Verified"
+    FAILED = "Failed"
+
+
+class LetterType(str,Enum):
+    EVICTION_NOTICE = "EVICTION_NOTICE"
+    WARNING_LETTER = "WARNING_LETTER"
+    RENT_REMINDER = "RENT_REMINDER"
+    GENERAL_NOTICE = "GENERAL_NOTICE"
+
+
+class AccountNumberVerificationStatus(str, Enum):
     PENDING = "Pending"
     VERIFIED = "Verified"
     FAILED = "Failed"
@@ -26,15 +45,24 @@ class ApplicationType(str, Enum):
 class GenderChoices(str, Enum):
     MALE = "Male"
     FEMALE = "Female"
+
+
 class SOLD_BY(str, Enum):
     MYSELF = "Myself"
-    SOMEONE_ELSE= "Someone Else"
+    SOMEONE_ELSE = "Someone Else"
     NOT_SOLD = "Not Sold"
+
 
 class NINVerificationProviders(str, Enum):
     YOU_VERIFY = "YouVerify"
     QORE_ID = "QoreID"
     PREMBLY = "Prembly"
+    NONE_YET = "None_Yet"
+
+
+class AccountVerificationProviders(str, Enum):
+    PAYSTACK = "Paystack"
+    FLUTTERWAVE = "FLUTTERWAVE"
     NONE_YET = "None_Yet"
 
 
@@ -86,14 +114,16 @@ class RentDuration(str, Enum):
 
 
 class PropertyTypes(str, Enum):
+    RESIDENTIAL = "Residential"
+    COMMERCIAL = "Commercial"
+    INDUSTRIAL = "Industrial"
+    MIXED_USE = "Mixed Use"
     LAND = "Land"
-    BUNGALOW = "Bungalow"
-    DUPLEX = "Duplex"
-    TERRACE = "Terrace"
-    FLAT = "Flat"
-    SELF_CON = "Self Contain"
-    COMMERCIAL_BUILDING = "Commercial Building"
-    OFFICE_SPACE = "Office Space"
+    AGRICULTURAL = "Agricultural"
+    HOSPITALITY = "Hospitality"
+    EDUCATIONAL = "Educational"
+    HEALTHCARE = "Healthcare"
+    RELIGIOUS = "Religious"
 
 
 # class RENT_PAYMENT_STATUS(str, Enum):
@@ -158,3 +188,23 @@ class Furnishing(Enum):
 class MessageStatus(str, Enum):
     TRUE = "True"
     FALSE = "False"
+
+
+class PaymentProvider(str, Enum):
+    PAYSTACK = "Paystack"
+    FLUTTERWAVE = "Flutterwave"
+    NONE_YET = "None Yet"
+
+
+class PaymentStatus(str, Enum):
+    PENDING = "Pending"
+    VERIFIED = "Verified"
+    FAILED = "Failed"
+    REFUNDED = "Refunded"
+
+
+class PayoutStatus(str, Enum):
+    PENDING = "Pending"
+    PROCESSING = "Processing"
+    COMPLETED = "Completed"
+    FAILED = "Failed"

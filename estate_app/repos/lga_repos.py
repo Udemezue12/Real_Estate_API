@@ -1,13 +1,14 @@
 import uuid
 from typing import List, Optional
 
-from core.geoapify import geocode_address
 from fastapi import HTTPException
 from geoalchemy2.shape import from_shape
-from models.models import LocalGovernmentArea, State
 from sqlalchemy import select, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
+
+from core.geoapify import geocode_address
+from models.models import LocalGovernmentArea, State
 
 
 class LGARepo:
@@ -23,6 +24,50 @@ class LGARepo:
             raise HTTPException(
                 status_code=404, detail=f"State '{state_name}' not found"
             )
+
+    async def get_lga_name_with_state_id(
+        self, name: str, state_id: uuid.UUID
+    ) -> Optional[LocalGovernmentArea]:
+        stmt = select(LocalGovernmentArea).where(
+            LocalGovernmentArea.name == name,
+            LocalGovernmentArea.state_id == state_id,
+        )
+        res = await self.db.execute(stmt)
+        return res.scalars().first()
+
+    async def create_or_get(
+        self,
+        *,
+        name: str,
+        state_id: uuid.UUID,
+        geom,
+    ) -> tuple[LocalGovernmentArea, bool]:
+        existing = await self.get_lga_name_with_state_id(name=name, state_id=state_id)
+
+        if existing:
+            return existing, False
+
+        lga = LocalGovernmentArea(
+            name=name,
+            location=geom,
+            state_id=state_id,
+        )
+
+        self.db.add(lga)
+
+        try:
+            await self.db.commit()
+            await self.db.refresh(lga)
+            return lga, True
+
+        except IntegrityError:
+            await self.db.rollback()
+            res = await self.db.execute(lga)
+            return res.scalars().first(), False
+
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise
 
     async def create(self, name: str, state_id: uuid.UUID):
         point = await geocode_address(name)
@@ -89,13 +134,26 @@ class LGARepo:
 
         return lga
 
-    async def get_all(self) -> List[LocalGovernmentArea]:
-        result = await self.db.execute(select(LocalGovernmentArea))
+    async def get_all(
+        self, page: int = 1, per_page: int = 20
+    ) -> List[LocalGovernmentArea]:
+        result = await self.db.execute(
+            select(LocalGovernmentArea)
+            .order_by(LocalGovernmentArea.name)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
         return result.scalars().all()
 
-    async def get_all_with_state(self) -> List[LocalGovernmentArea]:
+    async def get_all_with_state(
+        self, page: int = 1, per_page: int = 20
+    ) -> List[LocalGovernmentArea]:
         result = await self.db.execute(
-            select(LocalGovernmentArea).options(selectinload(LocalGovernmentArea.state))
+            select(LocalGovernmentArea)
+            .options(selectinload(LocalGovernmentArea.state))
+            .order_by(LocalGovernmentArea.name)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -137,6 +195,14 @@ class LGARepo:
         try:
             await self.db.commit()
             return lga
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise
+
+    async def db_commit(self):
+        try:
+            await self.db.commit()
+
         except SQLAlchemyError:
             await self.db.rollback()
             raise

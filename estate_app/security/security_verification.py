@@ -1,19 +1,29 @@
-import asyncio
+
+import logging
 import uuid
+
+from fastapi import BackgroundTasks, HTTPException
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from redis.asyncio import Redis
 
 from core.breaker import breaker
 from core.check_increment import CheckIncrementTimer
+from core.name_matcher import NameMatcher
 from core.settings import settings
-from email_notify.email_service import send_password_reset_link, send_verification_email
-from fastapi import BackgroundTasks, HTTPException
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from models.enums import BVNStatus, NINVerificationStatus
-from redis.asyncio import Redis
+from email_notify.email_service import EmailService
+from models.enums import (
+    AccountNumberVerificationStatus,
+    BVNVerificationProviders,
+    NINVerificationProviders,
+)
 from repos.auth_repo import AuthRepo
 from repos.profile_repo import UserProfileRepo
+from services.verification_dispatch import VerificationDispatch
+from services.verification_service import VerificationService
 from sms_notify.sms_service import send_sms
-from tasks.get_bvn_provider_tasks import GetBVNProvider
-from tasks.get_nin_provider_tasks import GetNinProvider
+from tasks.get_account_name_provider_tasks import GetAccountNameVerificationProvider
+from tasks.get_receipient_code_tasks import create_receipient_code_task
+from verify_nin.verify_nin_permbly import PremblyNINVerifier
 
 from .security_generate import user_generate
 
@@ -21,6 +31,7 @@ reset_serializer = URLSafeTimedSerializer(settings.RESET_SECRET_KEY)
 verify_serializer = URLSafeTimedSerializer(settings.VERIFY_EMAIL_SECRET_KEY)
 redis = Redis.from_url(settings.CELERY_REDIS_URL, decode_responses=True)
 resend_tracker: dict[str, dict] = {}
+logger = logging.getLogger("bvn.prembly")
 
 
 class UserVerification:
@@ -28,9 +39,16 @@ class UserVerification:
         self.repo = AuthRepo(db)
         self.profile_repo: UserProfileRepo = UserProfileRepo(db)
         self.check = CheckIncrementTimer()
-        self.select_nin_provider: GetNinProvider = GetNinProvider()
-        self.select_bvn_provider: GetBVNProvider = GetBVNProvider()
 
+        self.call_prembly = PremblyNINVerifier()
+        self.name_matcher = NameMatcher()
+        self.select_account_name_provider: GetAccountNameVerificationProvider = (
+            GetAccountNameVerificationProvider()
+        )
+        self.email_service: EmailService = EmailService()
+        self.verification_dispatch: VerificationDispatch = VerificationDispatch(db)
+        self.verification_service:VerificationService=VerificationService(db)
+    
     async def verify_reset_token(
         self, token: str, expiration: int = 3600
     ) -> str | None:
@@ -77,7 +95,9 @@ class UserVerification:
 
             otp = await user_generate.generate_otp(email)
             token = await user_generate.generate_verify_token(email)
-            background_tasks.add_task(send_verification_email, email, otp, token, name)
+            background_tasks.add_task(
+                self.email_service.send_verification_email, email, otp, token, name
+            )
             if hasattr(user, "phone_number") and user.phone_number:
                 background_tasks.add_task(
                     send_sms.send_sms,
@@ -101,7 +121,9 @@ class UserVerification:
             name = f"{user.first_name} {user.last_name}"
             otp = await user_generate.generate_otp(email)
             token = await user_generate.generate_reset_token(email)
-            background_tasks.add_task(send_password_reset_link, email, otp, token)
+            background_tasks.add_task(
+                self.email_service.send_password_reset_link, email, otp, token
+            )
             if hasattr(user, "phone_number") and user.phone_number:
                 background_tasks.add_task(
                     send_sms.send_sms,
@@ -139,27 +161,73 @@ class UserVerification:
 
         return await breaker.call(handler)
 
+    
+    async def verify_bvn(
+        self,
+        profile_id: uuid.UUID,
+        bvn: str,
+        bvn_verification_provider: BVNVerificationProviders,
+    ):
+        return await self.verification_service.verify_bvn(
+            profile_id=profile_id,
+            bvn=bvn,
+            bvn_verification_provider=bvn_verification_provider,
+        )
+    async def verify_nin(
+        self,
+        profile_id: uuid.UUID,
+        nin: str,
+        nin_verification_provider: NINVerificationProviders,
+    ):
+        return await self.verification_service.verify_nin(
+            profile_id=profile_id,
+            nin=nin,
+            nin_verification_provider=nin_verification_provider,
+        )
+
     async def reverify_nin(self, profile_id: uuid.UUID, data):
+        await self.verification_dispatch.reverify_nin(profile_id=profile_id, data=data)
+        return {"status": "verification_started"}
+
+    async def reverify_bvn(self, profile_id: uuid.UUID, data):
+        await self.verification_dispatch.reverify_bvn(profile_id=profile_id, data=data)
+
+        return {"status": "verification_started"}
+
+    async def reverify_account_number(self, profile_id: uuid.UUID, data):
         async def handler():
             profile = await self.profile_repo.get_profile(profile_id)
-            if profile.nin_verification_status == NINVerificationStatus.VERIFIED:
-                raise HTTPException(status_code=409, detail="NIN already verified")
-            asyncio.create_task(
-                self.select_nin_provider.get_provider(data=data, profile_id=profile_id)
+            if (
+                profile.account_verification_status
+                == AccountNumberVerificationStatus.VERIFIED
+            ):
+                raise HTTPException(
+                    status_code=409, detail="Account number already verified"
+                )
+
+            self.select_account_name_provider.get_provider(
+                data=data,
+                profile_id=profile_id,
             )
 
             return {"status": "verification_started"}
 
         return await breaker.call(handler)
-    async def reverify_bvn(self, profile_id: uuid.UUID, data):
+
+    async def get_paystack_code(self, profile_id: uuid.UUID):
         async def handler():
             profile = await self.profile_repo.get_profile(profile_id)
-            if profile.bvn_status == BVNStatus.VERIFIED:
-                raise HTTPException(status_code=409, detail="NIN already verified")
-            asyncio.create_task(
-                self.select_bvn_provider.get_provider(data=data, profile_id=profile_id)
+            if (
+                profile.account_verification_status
+                != AccountNumberVerificationStatus.VERIFIED
+            ):
+                raise HTTPException(
+                    status_code=409, detail="Account number not verified"
+                )
+            create_receipient_code_task.delay(
+                (str(profile.id)),
             )
 
-            return {"status": "verification_started"}
+            return {"message": "Starting.."}
 
         return await breaker.call(handler)

@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime
 
 from fastapi import HTTPException
-from models.models import RentalListingImage
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+
+from models.models import RentalListingImage
 
 
 class RentalListingImageRepo:
@@ -26,6 +27,7 @@ class RentalListingImageRepo:
             )
         )
         return result.scalar_one()
+
     async def count_user_uploads_between(
         self,
         user_id: uuid.UUID,
@@ -39,7 +41,7 @@ class RentalListingImageRepo:
             end = end.replace(tzinfo=None)
         stmt = (
             select(func.count(RentalListingImage.id))
-            .where(RentalListingImage.created_by_id== user_id)
+            .where(RentalListingImage.created_by_id == user_id)
             .where(RentalListingImage.uploaded_at >= start)
             .where(RentalListingImage.uploaded_at < end)
         )
@@ -49,7 +51,7 @@ class RentalListingImageRepo:
     async def create(
         self,
         listing_id: uuid.UUID,
-        rental_image_creator:uuid.UUID,
+        rental_image_creator: uuid.UUID,
         image_url: str,
         image_hash: str,
         public_id: str,
@@ -61,7 +63,7 @@ class RentalListingImageRepo:
             public_id=public_id,
             listing_id=listing_id,
             created_by_id=created_by_id,
-            rental_image_creator=rental_image_creator
+            rental_image_creator=rental_image_creator,
         )
         self.db.add(image)
         try:
@@ -78,11 +80,15 @@ class RentalListingImageRepo:
         )
         return result.scalar_one_or_none()
 
-    async def get_all(self, listing_id: uuid.UUID) -> list[RentalListingImage]:
+    async def get_all(
+        self, listing_id: uuid.UUID, page: int = 1, per_page: int = 20
+    ) -> list[RentalListingImage]:
         result = await self.db.execute(
-            select(RentalListingImage).where(
-                RentalListingImage.listing_id == listing_id
-            )
+            select(RentalListingImage)
+            .where(RentalListingImage.listing_id == listing_id)
+            .order_by(RentalListingImage.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -139,3 +145,5 @@ class RentalListingImageRepo:
         )
         await self.db.execute(stmt)
         await self.db.commit()
+    async def db_rollback(self):
+        await self.db.rollback()

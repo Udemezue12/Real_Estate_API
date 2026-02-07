@@ -1,14 +1,15 @@
+from decimal import Decimal
+
+from fastapi import HTTPException
+
+from core.date_helper import calculate_expiry
 from models.models import RentReceipt, Tenant
 from repos.rent_ledger_repo import RentLedgerRepository
 from repos.tenant_repo import TenantRepo
-from core.date_helper import calculate_expiry
-from fastapi import HTTPException
-from decimal import Decimal
 
 
 class RentAmountAndRenewalService:
     def __init__(self, db):
-        self.db = db
         self.tenant_repo: TenantRepo = TenantRepo(db)
         self.ledger_repo: RentLedgerRepository = RentLedgerRepository(db)
 

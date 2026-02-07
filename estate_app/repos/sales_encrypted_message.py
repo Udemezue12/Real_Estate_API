@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from uuid import UUID
-from models.models import SaleEncryptedMessage
-from sqlalchemy import select, and_, or_, update
+
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
-from datetime import datetime, timezone
+
+from models.models import SaleEncryptedMessage
 
 
 class SaleEncryptedMessageRepository:

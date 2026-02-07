@@ -1,15 +1,16 @@
 import uuid
 
-from models.models import IdempotencyKey
 from sqlalchemy import select, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from models.models import IdempotencyKey
 
 
 class IdempotencyRepo:
     def __init__(self, db):
         self.db = db
 
-    async def get(self, key: str, user_id: uuid.UUID):
+    async def get(self, key: str, user_id: uuid.UUID) -> IdempotencyKey | None:
         result = await self.db.execute(
             select(IdempotencyKey).where(
                 IdempotencyKey.key == key, IdempotencyKey.user_id == user_id
@@ -31,6 +32,25 @@ class IdempotencyRepo:
         await self._commit()
         return await self.get(key=key, user_id=user_id)
 
+    async def create_or_get(self, idem_key: str, user_id: uuid.UUID, endpoint: str):
+        record = IdempotencyKey(
+            key=idem_key,
+            user_id=user_id,
+            endpoint=endpoint,
+        )
+
+        self.db.add(record)
+
+        try:
+            await self.db.commit()
+            await self.db.refresh(record)
+            return record, True
+
+        except IntegrityError:
+            await self.db.rollback()
+
+            existing = await self.get(idem_key, user_id)
+            return existing, False
 
     async def _commit_and_refresh(self, idem: IdempotencyKey) -> IdempotencyKey:
         try:

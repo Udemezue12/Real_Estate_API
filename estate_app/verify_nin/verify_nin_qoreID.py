@@ -1,6 +1,8 @@
-from core.settings import settings
 from typing import Dict
+
 import httpx
+
+from core.settings import settings
 
 
 class QoreIDVerifyyNin:

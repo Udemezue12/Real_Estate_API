@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import HTTPException
-from models.enums import RENT_PAYMENT_STATUS
-from models.models import Property, RentPaymentProof, RentReceipt, Tenant
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
+
+from models.enums import RENT_PAYMENT_STATUS
+from models.models import Property, RentPaymentProof, RentReceipt, Tenant
 
 
 class PaymentProofRepo:
@@ -58,6 +60,7 @@ class PaymentProofRepo:
         public_id: str,
         created_by_id: uuid.UUID,
         status: RENT_PAYMENT_STATUS,
+        amount:Decimal,
     ) -> RentPaymentProof:
         image = RentPaymentProof(
             file_path=file_url,
@@ -67,6 +70,7 @@ class PaymentProofRepo:
             created_by_id=created_by_id,
             status=status,
             tenant_id=tenant_id,
+            amount_paid=amount
         )
         self.db.add(image)
         try:
@@ -92,7 +96,9 @@ class PaymentProofRepo:
         )
         return result.scalar_one_or_none()
 
-    async def get_all(self, user_id: uuid.UUID) -> list[RentPaymentProof]:
+    async def get_all(
+        self, user_id: uuid.UUID, page: int = 1, per_page: int = 20
+    ) -> list[RentPaymentProof]:
         result = await self.db.execute(
             select(RentPaymentProof)
             .where(RentPaymentProof.created_by_id == user_id)
@@ -104,6 +110,9 @@ class PaymentProofRepo:
                 selectinload(RentPaymentProof.property).selectinload(Property.lga),
                 selectinload(RentPaymentProof.property).selectinload(Property.images),
             )
+            .order_by(RentPaymentProof.uploaded_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -171,8 +180,7 @@ class PaymentProofRepo:
         return result.scalar_one_or_none()
 
     async def get_all_for_landlord(
-        self,
-        landlord_id: uuid.UUID,
+        self, landlord_id: uuid.UUID, page: int = 1, per_page: int = 20
     ) -> list[RentPaymentProof]:
         result = await self.db.execute(
             select(RentPaymentProof)
@@ -191,6 +199,9 @@ class PaymentProofRepo:
                 selectinload(RentPaymentProof.property).selectinload(Property.lga),
                 selectinload(RentPaymentProof.property).selectinload(Property.images),
             )
+            .order_by(RentPaymentProof.uploaded_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -198,6 +209,8 @@ class PaymentProofRepo:
         self,
         property_id: uuid.UUID,
         landlord_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
     ) -> list[RentPaymentProof]:
         result = await self.db.execute(
             select(RentPaymentProof)
@@ -217,6 +230,9 @@ class PaymentProofRepo:
                 selectinload(RentPaymentProof.property).selectinload(Property.lga),
                 selectinload(RentPaymentProof.property).selectinload(Property.images),
             )
+            .order_by(RentPaymentProof.uploaded_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 

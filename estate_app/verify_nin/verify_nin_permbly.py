@@ -1,6 +1,7 @@
 from typing import Dict
 
 import httpx
+
 from core.settings import settings
 
 

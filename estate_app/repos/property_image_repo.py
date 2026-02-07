@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime
 
 from fastapi import HTTPException
-from models.models import PropertyImage
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+
+from models.models import PropertyImage
 
 
 class PropertyImageRepo:
@@ -79,9 +80,15 @@ class PropertyImageRepo:
         )
         return result.scalar_one_or_none()
 
-    async def get_all(self, property_id: uuid.UUID) -> list[PropertyImage]:
+    async def get_all(
+        self, property_id: uuid.UUID, page: int = 1, per_page: int = 20
+    ) -> list[PropertyImage]:
         result = await self.db.execute(
-            select(PropertyImage).where(PropertyImage.property_id == property_id)
+            select(PropertyImage)
+            .where(PropertyImage.property_id == property_id)
+            .order_by(PropertyImage.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -136,3 +143,5 @@ class PropertyImageRepo:
         stmt = delete(PropertyImage).where(PropertyImage.property_id == property_id)
         await self.db.execute(stmt)
         await self.db.commit()
+    async def db_rollback(self):
+        await self.db.rollback()

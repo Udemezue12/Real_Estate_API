@@ -1,21 +1,23 @@
 import uuid
 from datetime import datetime
+
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
 from schemas.schema import (
     EncryptedMessageCreate,
-    SaleConversationOut,
     EncryptedMessageOut,
+    SaleConversationOut,
     ScheduleViewingIn,
 )
 from services.sales_message_service import SalesMessagingService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Property Listing For Sale Messaging"])
 

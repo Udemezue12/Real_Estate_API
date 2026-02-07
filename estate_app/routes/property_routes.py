@@ -1,16 +1,17 @@
 import uuid
 
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
 from schemas.schema import PropertyCreate, PropertyUpdate
 from services.property_service import PropertyService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Property Management"])
 
@@ -79,8 +80,8 @@ class PropertyRoutes:
         db: AsyncSession = Depends(get_db_async),
         current_user: User = Depends(get_current_user),
         _: None = Depends(validate_csrf_dependency),
-        page: int = 1, 
-        per_page: int = 20
+        page: int = 1,
+        per_page: int = 20,
     ):
         return await PropertyService(db).get_properties_by_state_user(
             user_id=current_user.id, state_id=state_id, page=page, per_page=per_page
@@ -97,7 +98,7 @@ class PropertyRoutes:
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).get_one_property(
-            user_id=current_user, property_id=property_id, lga_id=lga_id
+            user_id=current_user.id, property_id=property_id, lga_id=lga_id
         )
 
     @router.get("/{lga_id}/properties", dependencies=[rate_limit])
@@ -108,9 +109,50 @@ class PropertyRoutes:
         db: AsyncSession = Depends(get_db_async),
         current_user: User = Depends(get_current_user),
         _: None = Depends(validate_csrf_dependency),
-        page: int = 1, 
-        per_page: int = 20
+        page: int = 1,
+        per_page: int = 20,
     ):
         return await PropertyService(db).get_properties_by_lga_user(
             lga_id=lga_id, user_id=current_user.id, page=page, per_page=per_page
+        )
+
+    @router.get("/all/properties", dependencies=[rate_limit])
+    @safe_handler
+    async def get_all_user_properties(
+        self,
+        db: AsyncSession = Depends(get_db_async),
+        current_user: User = Depends(get_current_user),
+        _: None = Depends(validate_csrf_dependency),
+        page: int = 1,
+        per_page: int = 20,
+    ):
+        return await PropertyService(db).get_properties_by_user(
+            user_id=current_user.id, page=page, per_page=per_page
+        )
+
+    @router.get("/get/property", dependencies=[rate_limit])
+    @safe_handler
+    async def get_property(
+        self,
+        property_id: uuid.UUID,
+        db: AsyncSession = Depends(get_db_async),
+        current_user: User = Depends(get_current_user),
+        _: None = Depends(validate_csrf_dependency),
+    ):
+        return await PropertyService(db).get_single_property_by_user(
+            property_id=property_id,
+            current_user=current_user,
+        )
+
+    @router.post("/{property_id}/verify", dependencies=[rate_limit])
+    @safe_handler
+    async def verify_property(
+        self,
+        property_id: uuid.UUID,
+        db: AsyncSession = Depends(get_db_async),
+        current_user: User = Depends(get_current_user),
+        _: None = Depends(validate_csrf_dependency),
+    ):
+        return await PropertyService(db).mark_as_verified(
+            current_user=current_user, property_id=property_id
         )

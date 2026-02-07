@@ -21,8 +21,43 @@ BASE_PATH.mkdir(parents=True, exist_ok=True)
 
 class ReceiptGenerator:
     @staticmethod
+    def _payment_context_paragraph(receipt, property, styles):
+        context = receipt.payment_context
+
+        if context == "FULL_RENT":
+            return Paragraph(
+                "This receipt confirms a full rent payment for the period stated above.",
+                styles["Normal"],
+            )
+
+        if context == "HALF_RENT":
+            return Paragraph(
+                f"This receipt confirms an initial part-payment of rent for "
+                f"<b>{property.title}</b>. "
+                f"The tenant has made a minimum rent payment and is expected to "
+                f"clear the remaining balance.",
+                styles["Normal"],
+            )
+
+        if context == "OUTSTANDING_BALANCE":
+            return Paragraph(
+                f"This receipt confirms a rent balance settlement for "
+                f"<b>{property.title}</b>. "
+                f"The tenant is paying off an outstanding rent debt.",
+                styles["Normal"],
+            )
+
+        return Paragraph(
+            "This receipt confirms a rent payment for the period stated above.",
+            styles["Normal"],
+        )
+
+    @staticmethod
     def generate_pdf(receipt):
         file_path = BASE_PATH / f"{receipt.reference_number}.pdf"
+        balance = receipt.expected_amount - receipt.amount_paid
+        payment_status = "FULLY PAID" if receipt.fully_paid else "PARTIAL PAYMENT"
+        status_color = colors.green if receipt.fully_paid else colors.orange
 
         doc = SimpleDocTemplate(
             str(file_path),
@@ -74,7 +109,7 @@ class ReceiptGenerator:
                 styles["Meta"],
             )
         )
-       
+
         barcode_value = receipt.barcode_reference
 
         barcode = code128.Code128(
@@ -168,12 +203,14 @@ class ReceiptGenerator:
         elements.append(Paragraph("Payment Summary", styles["SectionHeader"]))
         payment_table = Table(
             [
-                ["Amount Paid", f"₦{receipt.amount:,.2f}"],
+                ["Expected Amount", f"₦{receipt.expected_amount:,.2f}"],
+                ["Amount Paid", f"₦{receipt.amount_paid:,.2f}"],
+                ["Outstanding Balance", f"₦{max(balance, 0):,.2f}"],
+                ["Payment Status", payment_status],
                 ["Month / Year", f"{receipt.month_paid_for}/{receipt.year_paid_for}"],
                 ["Duration", f"{receipt.rent_duration_months} month(s)"],
-                ["Payment Status", "PAID"],
             ],
-            colWidths=[120, None],
+            colWidths=[150, None],
         )
 
         payment_table.setStyle(
@@ -183,13 +220,30 @@ class ReceiptGenerator:
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
                     ("FONT", (0, 0), (0, -1), "Helvetica-Bold"),
                     ("TEXTCOLOR", (1, -1), (1, -1), colors.green),
+                    ("TEXTCOLOR", (1, 3), (1, 3), status_color),
                 ]
             )
         )
 
         elements.append(payment_table)
         elements.append(Spacer(1, 20))
+        elements.append(
+            ReceiptGenerator._payment_context_paragraph(
+                receipt=receipt,
+                property=property,
+                styles=styles,
+            )
+        )
 
+        if not receipt.fully_paid:
+            elements.append(
+                Paragraph(
+                    "⚠ This receipt reflects a partial rent payment. "
+                    "The outstanding balance must be cleared to fully complete "
+                    "the rent cycle.",
+                    styles["Normal"],
+                )
+            )
         elements.append(
             Paragraph(
                 "This receipt confirms that the rent payment listed above has been "
@@ -199,13 +253,6 @@ class ReceiptGenerator:
         )
 
         elements.append(Spacer(1, 12))
-
-        elements.append(
-            Paragraph(
-                "Generated electronically,",
-                styles["Meta"],
-            )
-        )
 
         doc.build(elements)
 

@@ -1,14 +1,16 @@
-import hashlib
-import requests
-import aiohttp
-from fastapi import HTTPException
-from core.asyncio_threads import BaseService
 import asyncio
+import hashlib
+
+import aiohttp
+import requests
+from fastapi import HTTPException
+
+from core.asyncio_threads import AsyncioBaseService
 
 
 class ComputeFileHash:
     def __init__(self):
-        self.asyncio_threads = BaseService()
+        self.asyncio_threads = AsyncioBaseService()
 
     async def compute_file_hash_async(self, file_url: str) -> str:
         async with aiohttp.ClientSession() as session:

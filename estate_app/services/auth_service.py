@@ -1,11 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
-from core.breaker import breaker
-from core.settings import settings
-from email_notify.email_service import send_password_reset_link, send_verification_email
 from fastapi import BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 from jose import ExpiredSignatureError, JWTError, jwt
+
+from core.breaker import breaker
+from core.check_permission import CheckRolePermission
+from core.redis_idempotency import RedisIdempotency
+from core.settings import settings
+from email_notify.email_service import EmailService
 from models.models import User
 from repos.auth_repo import AuthRepo
 from repos.tenant_repo import TenantRepo
@@ -28,13 +31,21 @@ refresh_exp = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_EXPIR
 
 
 class AuthService:
+    REGISTER_LOCK_KEY = "register-auth-service-v2"
+    LOGIN_LOCK_KEY = "login-auth-service-v2"
+
     def __init__(self, db):
         self.repo: AuthRepo = AuthRepo(db)
         self.tenant_repo: TenantRepo = TenantRepo(db)
         self.user_verification: UserVerification = UserVerification(db)
+        self.email_service: EmailService = EmailService()
+        self.permission: CheckRolePermission = CheckRolePermission()
+        self.redis_idempotency: RedisIdempotency = RedisIdempotency(
+            "auth-service-startup"
+        )
 
     async def register(self, data, background_tasks: BackgroundTasks):
-        async def handler():
+        async def _handler():
             name = f"{data.first_name} {data.middle_name} {data.last_name}"
             if await self.repo.get_by_email(email=data.email):
                 raise HTTPException(status_code=400, detail="Email already registered")
@@ -48,6 +59,7 @@ class AuthService:
                 raise HTTPException(
                     status_code=400, detail="Phone number already taken"
                 )
+            await self.permission.check_role(data.role)
             user = User(
                 username=data.username,
                 email=data.email.strip().lower(),
@@ -67,13 +79,12 @@ class AuthService:
                 data.middle_name,
             )
 
-            if len(tenants) == 1:
-                await self.tenant_repo.attach_user(tenants[0], user)
+            await self.tenant_repo.attach_user_to_many(tenants, user)
 
             otp = await user_generate.generate_otp(user.email)
             token = await user_generate.generate_verify_token(user.email)
             background_tasks.add_task(
-                send_verification_email, user.email, otp, token, name
+                self.email_service.send_verification_email, user.email, otp, token, name
             )
             if hasattr(data, "phone_number") and data.phone_number:
                 background_tasks.add_task(
@@ -87,10 +98,15 @@ class AuthService:
                 status_code=201,
             )
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=self.REGISTER_LOCK_KEY,
+            coro=_handler,
+            ttl=300,
+        )
 
     async def login(self, data):
         async def handler():
+            
             user = await self.repo.get_by_email(data.email)
             if not user or not user.check_password(raw_password=data.password):
                 raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -225,7 +241,9 @@ class AuthService:
             name = f"{user.first_name} {user.last_name}"
             token = await user_generate.generate_reset_token(user.email)
             otp = await user_generate.generate_otp(user.email)
-            background_tasks.add_task(send_password_reset_link, user.email, otp, token)
+            background_tasks.add_task(
+                self.email_service.send_password_reset_link, user.email, otp, token
+            )
             if user.phone_number:
                 background_tasks.add_task(
                     send_sms.send_sms, user.phone_number, otp, name

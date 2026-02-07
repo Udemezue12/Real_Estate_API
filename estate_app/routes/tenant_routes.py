@@ -1,17 +1,17 @@
 import uuid
 
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
-from core.idempotency_provider import get_idem_key
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
 from schemas.schema import TenantCreate, TenantUpdate, TenantWithPropertyOut
 from services.tenant_service import TenantService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Tenants Management"])
 
@@ -26,12 +26,12 @@ class TenantsRoutes:
         self,
         payload: TenantCreate,
         current_user: User = Depends(get_current_user),
-        idem_key: str = Depends(get_idem_key),
+        
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await TenantService(db).create_tenant(
-            current_user=current_user, payload=payload, idem_key=idem_key
+            current_user=current_user, payload=payload, 
         )
 
     @router.patch(
@@ -58,12 +58,12 @@ class TenantsRoutes:
         self,
         tenant_id: uuid.UUID,
         current_user: User = Depends(get_current_user),
-        idem_key: str = Depends(get_idem_key),
+        
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await TenantService(db).delete_tenant(
-            current_user=current_user, tenant_id=tenant_id, idem_key=idem_key
+            current_user=current_user, tenant_id=tenant_id, 
         )
 
     @router.get(

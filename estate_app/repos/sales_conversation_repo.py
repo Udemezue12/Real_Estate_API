@@ -1,11 +1,12 @@
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from models.enums import ViewingStatus
 from models.models import SaleConversation, SaleListing
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 class SaleConversationRepo:
@@ -64,7 +65,7 @@ class SaleConversationRepo:
         self.db.add(convo)
 
         try:
-            await self.db.commit()  
+            await self.db.commit()
             await self.db.refresh(convo)
             return convo
         except IntegrityError:
@@ -82,11 +83,17 @@ class SaleConversationRepo:
         return result.scalar_one_or_none()
 
     async def list_conversations_for_user(
-        self, user_id: UUID
+        self, user_id: UUID, page: int = 1, per_page: int = 20
     ) -> list[SaleConversation]:
-        stmt = select(SaleConversation).where(
-            (SaleConversation.buyer_id == user_id)
-            | (SaleConversation.seller_id == user_id)
+        stmt = (
+            select(SaleConversation)
+            .where(
+                (SaleConversation.buyer_id == user_id)
+                | (SaleConversation.seller_id == user_id)
+            )
+            .order_by(SaleConversation.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -104,6 +111,17 @@ class SaleConversationRepo:
         except SQLAlchemyError as e:
             await self.db.rollback()
             raise e
+
+    async def get_pending_conversations(self) -> List[SaleConversation]:
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+
+        stmt = select(SaleConversation).where(
+            SaleConversation.viewing_status == ViewingStatus.PENDING,
+            SaleConversation.updated_at < cutoff,
+        )
+        result = await self.db.execute(stmt)
+        convos: List[SaleConversation] = result.scalars().all()
+        return convos
 
     # async def update_conversation_last_message(
     #     self, conversation_id: UUID, last_message: str

@@ -1,19 +1,47 @@
 import uuid
 from typing import List, Optional
 
-from core.geoapify import geocode_address
 from fastapi import HTTPException
-from geoalchemy2.shape import from_shape
-from models.enums import HouseType, PropertyTypes
-from models.models import Property
-from sqlalchemy import delete, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
+
+from models.enums import HouseType, PropertyTypes
+from models.models import Property, User
 
 
 class PropertyRepo:
     def __init__(self, db):
         self.db = db
+
+    async def get_by_user(
+        self, user_id: uuid.UUID, property_id: uuid.UUID
+    ) -> Optional[Property]:
+        stmt = select(Property).where(
+            or_(
+                Property.owner_id == user_id,
+                Property.managed_by_id == user_id,
+            ).where(Property.id == property_id)
+        )
+        res = await self.db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_property_with_id(self, property_id: uuid.UUID) -> Property:
+        stmt = (
+            select(Property)
+            .where(Property.id == property_id)
+            .options(
+                selectinload(Property.managed_by),
+                selectinload(Property.state),
+                selectinload(Property.lga),
+                selectinload(Property.owner),
+                selectinload(Property.images),
+            )
+        )
+        result = await self.db.execute(stmt)
+        prop = result.scalar_one_or_none()
+
+        return prop
 
     async def get_property_with_relations(self, property_id: uuid.UUID) -> Property:
         result = await self.db.execute(
@@ -47,9 +75,11 @@ class PropertyRepo:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_id(self, property_id: uuid.UUID) -> Optional[Property]:
+    async def get_by_id(self, property_id: uuid.UUID) -> Property | None:
         result = await self.db.execute(
-            select(Property).where(Property.id == property_id)
+            select(Property)
+            .where(Property.id == property_id)
+            .options(selectinload(Property.owner).selectinload(User.profile))
         )
         return result.scalar_one_or_none()
 
@@ -60,6 +90,7 @@ class PropertyRepo:
                 selectinload(Property.images),
                 selectinload(Property.tenants),
                 selectinload(Property.rent_receipts),
+                selectinload(Property.owner).selectinload(User.profile),
             )
             .where(Property.id == property_id)
         )
@@ -85,6 +116,7 @@ class PropertyRepo:
         is_owner: bool,
         is_manager: bool,
         managed_by_id: uuid.UUID,
+        is_verified: bool = False,
     ):
         new_property = Property(
             state_id=state_id,
@@ -104,6 +136,7 @@ class PropertyRepo:
             is_owner=is_owner,
             is_manager=is_manager,
             managed_by_id=managed_by_id,
+            is_verified=is_verified,
         )
         self.db.add(new_property)
         try:
@@ -191,6 +224,20 @@ class PropertyRepo:
             await self.db.rollback()
             raise
 
+    async def mark_property_verified(self, property_id: uuid.UUID, is_verified: bool):
+        stmt = (
+            update(Property)
+            .where(Property.id == property_id)
+            .values(is_verified=is_verified)
+        )
+        try:
+            await self.db.execute(stmt)
+            await self.db.commit()
+            return await self.get_it_by_id(property_id)
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise
+
     async def delete_property(
         self, user_id: uuid.UUID, property_id: uuid.UUID
     ) -> Property:
@@ -208,18 +255,32 @@ class PropertyRepo:
             await self.db.rollback()
             raise
 
-    async def get_all(self) -> list[Property]:
-        result = await self.db.execute(select(Property))
-        return result.scalars().all()
-
-    async def get_all_by_user(self, user_id: uuid.UUID) -> List[Property]:
-        query = select(Property).where(Property.owner_id == user_id)
-        result = await self.db.execute(query)
-        return result.scalars().all()
-
-    async def get_all_properties(self) -> List[Property]:
+    async def get_all(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
+    ) -> list[Property]:
         result = await self.db.execute(
-            select(Property).options(
+            select(Property)
+            .where(Property.is_verified == is_verified)
+            .order_by(Property.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+        return result.scalars().all()
+
+    async def get_all_by_user(
+        self,
+        user_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
+    ) -> List[Property]:
+        query = (
+            select(Property)
+            .where(Property.owner_id == user_id, Property.is_verified == is_verified)
+            .options(
                 selectinload(Property.images),
                 selectinload(Property.tenants),
                 selectinload(Property.state),
@@ -228,6 +289,56 @@ class PropertyRepo:
                 selectinload(Property.owner),
                 selectinload(Property.managed_by),
             )
+            .order_by(Property.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+    async def get_single_property_by_user(
+        self,
+        user_id: uuid.UUID,
+        property_id: uuid.UUID,
+    ) -> Optional[Property]:
+        query = (
+            select(Property)
+            .where(Property.owner_id == user_id, Property.id == property_id)
+            .options(
+                selectinload(Property.images),
+                selectinload(Property.tenants),
+                selectinload(Property.state),
+                selectinload(Property.lga),
+                selectinload(Property.rent_receipts),
+                selectinload(Property.owner),
+                selectinload(Property.managed_by),
+            )
+            .order_by(Property.id)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_all_properties(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
+    ) -> List[Property]:
+        result = await self.db.execute(
+            select(Property)
+            .where(Property.is_verified == is_verified)
+            .options(
+                selectinload(Property.images),
+                selectinload(Property.tenants),
+                selectinload(Property.state),
+                selectinload(Property.lga),
+                selectinload(Property.rent_receipts),
+                selectinload(Property.owner),
+                selectinload(Property.managed_by),
+            )
+            .order_by(Property.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -247,11 +358,33 @@ class PropertyRepo:
         )
         return result.scalars().first()
 
+    async def get_it_by_id(self, property_id: uuid.UUID) -> Optional[Property]:
+        result = await self.db.execute(
+            select(Property)
+            .options(
+                selectinload(Property.images),
+                selectinload(Property.tenants),
+                selectinload(Property.state),
+                selectinload(Property.lga),
+                selectinload(Property.rent_receipts),
+                selectinload(Property.owner),
+                selectinload(Property.managed_by),
+            )
+            .where(Property.id == property_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_properties_by_state_user(
-        self, state_id: uuid.UUID, user_id: uuid.UUID
+        self,
+        state_id: uuid.UUID,
+        user_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
     ) -> List[Property]:
         result = await self.db.execute(
             select(Property)
+            .where(Property.is_verified == is_verified)
             .options(
                 selectinload(Property.images),
                 selectinload(Property.tenants),
@@ -265,8 +398,21 @@ class PropertyRepo:
                 Property.state_id == state_id,
                 (Property.owner_id == user_id) | (Property.managed_by_id == user_id),
             )
+            .order_by(Property.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
+
+    async def update_is_occupied(
+        self, property_id: uuid.UUID, is_occupied: bool = True
+    ):
+        await self.db.execute(
+            update(Property)
+            .where(Property.id == property_id)
+            .values(is_occupied=is_occupied)
+        )
+        await self.db_commit()
 
     async def get_property_by_state_user(
         self, state_id: uuid.UUID, property_id: uuid.UUID, user_id: uuid.UUID
@@ -291,10 +437,16 @@ class PropertyRepo:
         return result.scalar_one_or_none()
 
     async def get_properties_by_lga_user(
-        self, lga_id: uuid.UUID, user_id: uuid.UUID
+        self,
+        lga_id: uuid.UUID,
+        user_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
     ) -> List[Property]:
         result = await self.db.execute(
             select(Property)
+            .where(Property.is_verified == is_verified)
             .options(
                 selectinload(Property.images),
                 selectinload(Property.tenants),
@@ -308,6 +460,9 @@ class PropertyRepo:
                 Property.lga_id == lga_id,
                 (Property.owner_id == user_id) | (Property.managed_by_id == user_id),
             )
+            .order_by(Property.id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -332,3 +487,10 @@ class PropertyRepo:
             )
         )
         return result.scalar_one_or_none()
+
+    async def db_commit(self):
+        try:
+            await self.db.commit()
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise

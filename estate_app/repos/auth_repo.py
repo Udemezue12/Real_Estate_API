@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from models.models import BlacklistedToken, User
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
+
+from models.models import BlacklistedToken, User
 
 
 class AuthRepo:
@@ -37,7 +38,6 @@ class AuthRepo:
 
     async def get_by_email(self, email: str) -> User | None:
         email_payload = email.strip().lower()
-        # email_payload = email
         result = await self.db.execute(select(User).where(User.email == email_payload))
         return result.scalar_one_or_none()
 
@@ -90,6 +90,8 @@ class AuthRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
+
+    
 
     async def blacklist_token(self, token: str):
         stmt = (

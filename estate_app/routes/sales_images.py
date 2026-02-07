@@ -1,32 +1,68 @@
 import uuid
 
-from core.cloudinary_setup import cloudinary_client
+from fastapi import APIRouter, Depends
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.get_current_user import get_current_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, Depends
-from fastapi_utils.cbv import cbv
 from models.models import User
-from schemas.schema import CloudinaryUpdateRequest, CloudinaryUploadRequest
+from schemas.schema import (
+    BaseImageOut,
+    CloudinaryUpdateRequest,
+    CloudinaryUploadRequest,
+)
 from services.sales_images_service import SaleListingImageService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Upload Images"])
 
 
 @cbv(router)
 class SalesUploadImageRoutes:
-    @router.get("/{listing_id}/get", dependencies=[rate_limit])
+    @router.get(
+        "/{listing_id}/get/all",
+        dependencies=[rate_limit],
+        response_model=list[BaseImageOut],
+    )
     @safe_handler
     async def get(
         self,
         listing_id: uuid.UUID,
+        page: int = 1,
+        per_page: int = 20,
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
+        current_user: User = Depends(get_current_user),
     ):
-        return await SaleListingImageService(db).get_all_images(listing_id=listing_id)
+        return await SaleListingImageService(db).get_all_images(
+            listing_id=listing_id,
+            page=page,
+            per_page=per_page,
+            current_user=current_user,
+        )
+
+    @router.get(
+        "/{listing_id}/{image_id}/get",
+        dependencies=[rate_limit],
+        response_model=BaseImageOut,
+    )
+    @safe_handler
+    async def get_images(
+        self,
+        listing_id: uuid.UUID,
+        image_id: uuid.UUID,
+        db: AsyncSession = Depends(get_db_async),
+        _: None = Depends(validate_csrf_dependency),
+        current_user: User = Depends(get_current_user),
+    ):
+        return await SaleListingImageService(db).get_image(
+            listing_id=listing_id,
+            image_id=image_id,
+            current_user=current_user,
+        )
 
     @router.post("/{listing_id}/upload", dependencies=[rate_limit])
     @safe_handler

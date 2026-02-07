@@ -1,8 +1,10 @@
-from fastapi import HTTPException
 import uuid
-from models.models import PasskeyCredential, User
+
+from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
+
+from models.models import PasskeyCredential, User
 
 
 class PasskeyRepo:
@@ -10,11 +12,14 @@ class PasskeyRepo:
         self.db = db
 
     async def get_all_passkeys_for_user(
-        self,
-        user_id: uuid.UUID,
+        self, user_id: uuid.UUID, page: int = 1, per_page: int = 20
     ) -> list[PasskeyCredential]:
         result = await self.db.execute(
-            select(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
+            select(PasskeyCredential)
+            .where(PasskeyCredential.user_id == user_id)
+            .order_by(PasskeyCredential.credential_id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -65,15 +70,26 @@ class PasskeyRepo:
             await self.db.rollback()
             raise HTTPException(500, "Could not Update")
 
-    async def get_credentials(self) -> PasskeyCredential:
-        result = await self.db.execute(select(PasskeyCredential))
+    async def get_credentials(
+        self, page: int = 1, per_page: int = 20
+    ) -> PasskeyCredential:
+        result = await self.db.execute(
+            select(PasskeyCredential)
+            .order_by(PasskeyCredential.credential_id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
         return result.scalars().all()
 
     async def get_registered_passkeys(
-        self, user_id: uuid.UUID
+        self, user_id: uuid.UUID, page: int = 1, per_page: int = 20
     ) -> list[PasskeyCredential]:
         result = await self.db.execute(
-            select(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
+            select(PasskeyCredential)
+            .where(PasskeyCredential.user_id == user_id)
+            .order_by(PasskeyCredential.credential_id)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
         return result.scalars().all()
 
@@ -113,8 +129,8 @@ class PasskeyRepo:
         device_fingerprint: str,
         user_id: int,
         public_key: str,
-        sign_count:int,
-    )-> PasskeyCredential:
+        sign_count: int,
+    ) -> PasskeyCredential:
         new_cred = PasskeyCredential(
             credential_id=credential_id,
             device_fingerprint=device_fingerprint,

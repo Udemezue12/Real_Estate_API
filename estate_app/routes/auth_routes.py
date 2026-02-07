@@ -1,26 +1,34 @@
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi_utils.cbv import cbv
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.check_login import check_logged_in, check_not_logged_in
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi_utils.cbv import cbv
 from schemas.schema import (
     ForgotPasswordSchema,
+    ResendEmailSchema,
     ResetPasswordSchema,
     UserCreate,
     UserLoginInput,
-    ResendEmailSchema,
 )
 from security.security_verification import UserVerification
 from services.auth_service import AuthService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["User Authentication"])
 
 
 @cbv(router)
 class UserRoutes:
-    @router.post("/register", dependencies=[rate_limit])
+    @router.post(
+        "/register",
+        dependencies=[
+            rate_limit,
+            Depends(check_not_logged_in),
+        ],
+    )
     @safe_handler
     async def register(
         self,
@@ -41,7 +49,10 @@ class UserRoutes:
     ):
         return await AuthService(db).login(data)
 
-    @router.post("/logout", dependencies=[rate_limit])
+    @router.post(
+        "/logout",
+        dependencies=[rate_limit, Depends(check_logged_in)],
+    )
     @safe_handler
     async def logout(
         self,

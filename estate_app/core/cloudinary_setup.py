@@ -1,4 +1,5 @@
-import time, asyncio
+import asyncio
+import time
 import uuid
 from pathlib import Path
 
@@ -23,11 +24,13 @@ class CloudinaryClient:
         )
 
     async def validate_signature_timestamp(
-        self, timestamp: int, *, ttl_seconds: int = 30
+        self, timestamp: int | str, *, ttl_seconds: int = 30
     ) -> None:
         now = int(time.time())
-        if not isinstance(timestamp, int):
-            raise HTTPException(status_code=400, detail="Invalid timestamp fprmat")
+        try:
+           timestamp = int(timestamp)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400,detail="Invalid timestamp format")
         if now - timestamp > ttl_seconds:
             raise HTTPException(
                 status_code=400,
@@ -64,7 +67,8 @@ class CloudinaryClient:
             allowed_formats = ["jpg", "jpeg", "png", "webp"]
 
             timestamp = int(time.time())
-            await self.validate_signature_timestamp(timestamp=timestamp, ttl_seconds=30)
+            await self.validate_signature_timestamp(timestamp)
+            
 
             eager = "f_auto,q_auto"
 
@@ -169,10 +173,10 @@ class CloudinaryClient:
                 "cloud_name": cloudinary.config().cloud_name,
                 "folder": folder,
                 "resource_type": "video",
-                # FRONTEND VALIDATION ONLY
+                
                 "allowed_formats": allowed_formats,
-                "max_file_size": MAX_FILE_SIZE,  # 50MB
-                "max_duration": 60,  # frontend check only
+                "max_file_size": MAX_FILE_SIZE,  
+                "max_duration": 60,  
             }
 
         except Exception as e:
@@ -191,6 +195,8 @@ class CloudinaryClient:
             params_to_sign = {
                 "timestamp": timestamp,
                 "folder": folder,
+                "resource_type": "raw",  # Add to enforce raw type (for non-media files like PDF)
+                "allowed_formats": "pdf"
             }
             if public_id:
                 params_to_sign["public_id"] = public_id
@@ -239,13 +245,20 @@ class CloudinaryClient:
 
     async def delete_image(self, public_id: str, resource_type:str) -> dict:
         try:
-            return cloudinary.uploader.destroy(
-                public_id, resource_type=resource_type, invalidate=True
+            loop = asyncio.get_running_loop()
+
+            func = functools.partial(
+                cloudinary.uploader.destroy,
+                public_id,
+                resource_type=resource_type,
+                invalidate=True,
             )
+
+            return await loop.run_in_executor(None, func)  
         except Exception as e:
             raise HTTPException(500, f"Failed to delete image: {e}")
 
-    async def delete_images(self, public_ids: list[str], resource_type:str) -> dict:
+    async def delete_images(self, public_ids: list[str]) -> dict:
         if not public_ids:
             raise HTTPException(status_code=400, detail="No public_ids provided")
 
@@ -254,7 +267,7 @@ class CloudinaryClient:
 
             result = await loop.run_in_executor(
                 None,
-                lambda: cloudinary.api.delete_resources(public_ids, resource_type=resource_type, invalidate=True),
+                lambda: cloudinary.api.delete_resources(public_ids, invalidate=True),
             )
 
             return {
@@ -336,7 +349,7 @@ class CloudinaryClient:
 
     async def safe_delete_many_cloudinary(self, public_ids: list[str], resource_type:str):
         try:
-            await self.delete_images(public_ids,resource_type=resource_type)
+            await self.delete_images(public_ids)
         except Exception:
             pass
 

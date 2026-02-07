@@ -1,4 +1,5 @@
 import httpx
+
 from core.settings import settings
 
 
@@ -139,6 +140,73 @@ class TermiiClient:
             "api_key": self.api_key,
         }
 
+        if not self.client:
+            raise RuntimeError("Termii client not connected")
+
+        response = await self.client.post("/api/sms/send", json=payload)
+        return response.json()
+
+    async def send_tenant_rent_paid_sms(
+        self,
+        to: str,
+        amount: str,
+        message: str | None = None,
+        tenant_name: str | None = None,
+        sender_id=settings.TERMII_SENDER_ID,
+    ):
+        if not message:
+            if tenant_name:
+                message = (
+                    f"Hello {tenant_name}, we have received your rent payment of {amount}.\n\n"
+                    "Thank you for your prompt payment."
+                )
+            else:
+                message = (
+                    f"We have received your rent payment of {amount}.\n\n"
+                    "Thank you for your prompt payment."
+                )
+
+        payload = {
+            "to": to,
+            "from": sender_id,
+            "sms": message,
+            "type": "plain",
+            "channel": "generic",
+            "api_key": self.api_key,
+        }
+
+        if not self.client:
+            raise RuntimeError("Termii client not connected")
+
+        response = await self.client.post("/api/sms/send", json=payload)
+        return response.json()
+
+    async def rent_paid_sms(
+        self,
+        to: str,
+        amount: str,
+        message: str | None = None,
+        landlord_name: str | None = None,
+        tenant_name: str | None = None,
+        sender_id=settings.TERMII_SENDER_ID,
+    ):
+        if not message:
+            if landlord_name:
+                message = (
+                    f"Hello {landlord_name}, your tenant with the name {tenant_name} has paid rent of {amount}.\n\n"
+                    "Thank you."
+                )
+            else:
+                message = f"Your tenant has paid rent of {amount}.\n\nThank you."
+
+        payload = {
+            "to": to,
+            "from": sender_id,
+            "sms": message,
+            "type": "plain",
+            "channel": "generic",
+            "api_key": self.api_key,
+        }
         if not self.client:
             raise RuntimeError("Termii client not connected")
 

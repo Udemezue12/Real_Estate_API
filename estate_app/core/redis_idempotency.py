@@ -1,8 +1,10 @@
-import uuid
-import urllib.parse
-import httpx
 import logging
-from typing import Callable, Awaitable
+import urllib.parse
+import uuid
+from typing import Awaitable, Callable
+
+import httpx
+
 from .breaker import breaker
 from .settings import settings
 
@@ -11,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 class RedisIdempotency:
     def __init__(self, namespace: str = "idempotency"):
-        self.redis_url = settings.UPSTASH_REDIS_URL.rstrip("/")
+        redis_url = settings.UPSTASH_REDIS_URL
+        if not redis_url:
+            raise ValueError("Missing UPSTASH REDIS URL in the env variables")
+        self.redis_url = redis_url.rstrip("/")
         self.redis_token = settings.UPSTASH_REDIS_TOKEN
         self.namespace = namespace
 
@@ -49,15 +54,36 @@ class RedisIdempotency:
 
         return await breaker.call(handler)
 
+    async def delete(self, key: str) -> bool:
+        async def handler():
+            encoded_key = urllib.parse.quote(self._key(key))
+
+            url = f"{self.redis_url}/del/{encoded_key}"
+
+            async with httpx.AsyncClient() as client:
+                res = await client.post(
+                    url,
+                    headers=self.headers,
+                )
+
+                if res.status_code == 200:
+                    return True
+
+                raise ConnectionError(f"Redis DEL failed ({res.status_code})")
+
+        return await breaker.call(handler)
+
     async def run_once(
         self,
         key: str,
         coro: Callable[[], Awaitable],
         ttl: int = 30,
     ):
-        acquired = await self.acquire(key, ttl)
+        try:
+            acquired = await self.acquire(key, ttl)
+            if not acquired:
+                raise RuntimeError("Duplicate request in progress or already processed")
 
-        if not acquired:
-            raise RuntimeError("Duplicate request in progress or already processed")
-
-        return await coro()
+            return await coro()
+        finally:
+            await self.delete(key)

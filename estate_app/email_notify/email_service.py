@@ -6,9 +6,50 @@ from core.breaker import breaker
 from core.settings import settings
 
 
-async def send_rent_reminder_email(email: str, days_left: int, name: str):
-    async def handler():
-        html_content = f"""
+class EmailService:
+    async def send(self, message):
+        try:
+            await aiosmtplib.send(
+                message,
+                hostname=settings.EMAIL_SERVER,
+                port=settings.EMAIL_PORT,
+                username=settings.EMAIL_USER,
+                password=settings.EMAIL_PASSWORD,
+                start_tls=settings.EMAIL_USE_TLS,
+            )
+        except Exception as e:
+            print(f"Error sending verification email: {e}")
+
+            raise
+
+    async def send_rent_paid_email(
+        self, email: str, landlord_name: str, tenant_name: str, amount
+    ):
+        async def handler():
+            html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h2>Rent Payment Notification</h2>
+            <p>Hello {landlord_name},</p>
+            <p> {tenant_name} has paid rent of {amount}</p>
+            <p>Best regards,<br>Your Support Team</p>
+        </body>
+        </html>
+        """
+
+            message = MIMEMultipart("alternative")
+            message["Subject"] = "Rent Expired Notice"
+            message["From"] = settings.EMAIL_USER
+            message["To"] = email
+            message.attach(MIMEText(html_content, "html"))
+
+            await self.send(message=message)
+
+        return await breaker.call(handler)
+
+    async def send_rent_reminder_email(self, email: str, days_left: int, name: str):
+        async def handler():
+            html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Email Verification</h2>
@@ -20,31 +61,19 @@ async def send_rent_reminder_email(email: str, days_left: int, name: str):
         </html>
         """
 
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Rent Payment Reminder"
-        message["From"] = settings.EMAIL_USER
-        message["To"] = email
-        message.attach(MIMEText(html_content, "html"))
+            message = MIMEMultipart("alternative")
+            message["Subject"] = "Rent Payment Reminder"
+            message["From"] = settings.EMAIL_USER
+            message["To"] = email
+            message.attach(MIMEText(html_content, "html"))
 
-        try:
-            await aiosmtplib.send(
-                message,
-                hostname=settings.EMAIL_SERVER,
-                port=settings.EMAIL_PORT,
-                username=settings.EMAIL_USER,
-                password=settings.EMAIL_PASSWORD,
-                start_tls=settings.EMAIL_USE_TLS,
-            )
-        except Exception as e:
-            print(f"Error sending rent reminder email: {e}")
-            raise
+            await self.send(message)
 
-    return await breaker.call(handler)
+        return await breaker.call(handler)
 
-
-async def send_rent_expired_email(email: str, name: str):
-    async def handler():
-        html_content = f"""
+    async def send_rent_expired_email(self, email: str, name: str):
+        async def handler():
+            html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Email Verification</h2>
@@ -56,33 +85,23 @@ async def send_rent_expired_email(email: str, name: str):
         </html>
         """
 
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Rent Expired Notice"
-        message["From"] = settings.EMAIL_USER
-        message["To"] = email
-        message.attach(MIMEText(html_content, "html"))
+            message = MIMEMultipart("alternative")
+            message["Subject"] = "Rent Expired Notice"
+            message["From"] = settings.EMAIL_USER
+            message["To"] = email
+            message.attach(MIMEText(html_content, "html"))
 
-        try:
-            await aiosmtplib.send(
-                message,
-                hostname=settings.EMAIL_SERVER,
-                port=settings.EMAIL_PORT,
-                username=settings.EMAIL_USER,
-                password=settings.EMAIL_PASSWORD,
-                start_tls=settings.EMAIL_USE_TLS,
-            )
-        except Exception as e:
-            print(f"Error sending email: {e}")
-            raise
+            await self.send(message=message)
 
-    return await breaker.call(handler)
+        return await breaker.call(handler)
 
+    async def send_verification_email(
+        self, email: str, otp: str, token: str, name: str
+    ):
+        async def handler():
+            verify_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
 
-async def send_verification_email(email: str, otp: str, token: str, name: str):
-    async def handler():
-        verify_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-
-        html_content = f"""
+            html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Email Verification</h2>
@@ -100,33 +119,20 @@ async def send_verification_email(email: str, otp: str, token: str, name: str):
         </html>
         """
 
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Verify Your Email"
-        message["From"] = settings.EMAIL_USER
-        message["To"] = email
-        message.attach(MIMEText(html_content, "html"))
+            message = MIMEMultipart("alternative")
+            message["Subject"] = "Verify Your Email"
+            message["From"] = settings.EMAIL_USER
+            message["To"] = email
+            message.attach(MIMEText(html_content, "html"))
+            await self.send(message=message)
 
-        try:
-            await aiosmtplib.send(
-                message,
-                hostname=settings.EMAIL_SERVER,
-                port=settings.EMAIL_PORT,
-                username=settings.EMAIL_USER,
-                password=settings.EMAIL_PASSWORD,
-                start_tls=settings.EMAIL_USE_TLS,
-            )
-        except Exception as e:
-            print(f"Error sending verification email: {e}")
-            raise
+        return await breaker.call(handler)
 
-    return await breaker.call(handler)
+    async def send_password_reset_link(self, email: str, otp: str, token: str):
+        async def handler():
+            reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
 
-
-async def send_password_reset_link(email: str, otp: str, token: str):
-    async def handler():
-        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-
-        html_content = f"""
+            html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Email Verification</h2>
@@ -144,23 +150,39 @@ async def send_password_reset_link(email: str, otp: str, token: str):
         </html>
         """
 
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Reset Your Password"
-        message["From"] = settings.EMAIL_USER
-        message["To"] = email
-        message.attach(MIMEText(html_content, "html"))
+            message = MIMEMultipart("alternative")
+            message["Subject"] = "Reset Your Password"
+            message["From"] = settings.EMAIL_USER
+            message["To"] = email
+            message.attach(MIMEText(html_content, "html"))
+            await self.send(message=message)
 
-        try:
-            await aiosmtplib.send(
-                message,
-                hostname=settings.EMAIL_SERVER,
-                port=settings.EMAIL_PORT,
-                username=settings.EMAIL_USER,
-                password=settings.EMAIL_PASSWORD,
-                start_tls=settings.EMAIL_USE_TLS,
-            )
-        except Exception as e:
-            print(f"Error sending verification email: {e}")
-            raise
+        return await breaker.call(handler)
 
-    return await breaker.call(handler)
+    async def send_rent_processed_mail(
+        self, email: str, landlord_name: str, tenant_name: str, path: str
+    ):
+        async def handler():
+            html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h2>Email Verification</h2>
+            <p>Hello {tenant_name},</p>
+    
+            <p>Your rent has been fully processed, click here to download your receipt:</p>
+            <a href="{path}" style="display:inline-block;background:#28a745;color:white;padding:10px 20px;
+               text-decoration:none;border-radius:4px;">Download Receipt</a>
+
+            <p>Best regards,<br>{landlord_name}</p>
+        </body>
+        </html>
+        """
+
+            message = MIMEMultipart("alternative")
+            message["Subject"] = "Reset Your Password"
+            message["From"] = settings.EMAIL_USER
+            message["To"] = email
+            message.attach(MIMEText(html_content, "html"))
+            await self.send(message=message)
+
+        return await breaker.call(handler)

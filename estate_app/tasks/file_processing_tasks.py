@@ -1,14 +1,15 @@
-import asyncio
-from datetime import datetime
+import os
+from datetime import datetime, timezone
+from io import BytesIO
+from typing import Optional
+
 import httpx
 from PIL import Image
-from io import BytesIO
-import os
-
 from sqlalchemy import insert
+
+from core.asyncio_threads import asyncio_run
 from core.get_db import AsyncSessionLocal as async_session
 from models.models import SaleListingImage
-from typing import Optional
 
 
 class FileProcessingTasks:
@@ -16,7 +17,7 @@ class FileProcessingTasks:
     def register_tasks(app):
         app.task(name="process_file", bind=True)(FileProcessingTasks.process_file)
         app.task(
-            name="post_process_file", bind=True, max_retries=3, default_retry_delay=10
+            name="post_process_file", bind=True, max_retries=4, default_retry_delay=10
         )(FileProcessingTasks.post_process_file)
         app.task(name="send_notification", bind=True)(
             FileProcessingTasks.send_notification
@@ -30,7 +31,7 @@ class FileProcessingTasks:
             notification_msg = (
                 message or f"File processed for listing {listing_id}: {url}"
             )
-            # Here you would integrate with your notification system (email, push, SMS)
+
             print(f"[NOTIFICATION] {notification_msg}")
         except Exception as e:
             print(f"[WARN] Failed to send notification: {e}")
@@ -54,10 +55,9 @@ class FileProcessingTasks:
                     img.save(save_path)
                     return save_path
 
-                thumbnail_path = asyncio.run(asyncio.to_thread(generate_thumbnail))
+                thumbnail_path = asyncio_run.run_async(generate_thumbnail)
                 print(f"[INFO] Thumbnail saved at {thumbnail_path}")
 
-                # 2️⃣ Save thumbnail path to DB
                 async with async_session() as session:
                     image_entry = await session.get(SaleListingImage, listing_id)
                     if image_entry:
@@ -80,7 +80,7 @@ class FileProcessingTasks:
             print(f"[{end_time.isoformat()}] Finished post-processing: {url}")
             return True
 
-        return asyncio.run(_post_process())
+        return asyncio_run.run_async(_post_process())
 
     @staticmethod
     def process_file(self, url: str, listing_id: str):
@@ -111,7 +111,7 @@ class FileProcessingTasks:
                         img.save(save_path_local)
                         return save_path_local, len(response.content)
 
-                    save_path, size_bytes = await asyncio.to_thread(resize_image)
+                    save_path, size_bytes = await asyncio_run.run_async(resize_image)
                     print(f"[INFO] Image resized: {save_path}")
             except Exception as e:
                 print(f"[WARN] Failed to resize image: {e}")
@@ -142,4 +142,4 @@ class FileProcessingTasks:
 
             return True
 
-        return asyncio.run(_process())
+        return asyncio_run.run_async(_process())
