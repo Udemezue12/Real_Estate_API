@@ -4,13 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 
-from admin.admin_init import admin_manager
+from services.lifespan_auotpopulate import run_autopopulate
 from core.rabbitmq import rabbitmq
 from core.throttling import rate_limiter_manager
 from repos.auth_repo import AuthRepo
-from services.bank_service import BankService
-from services.lga_service import LGAService
-from services.state_services import StateService
+
 from sms_notify.sms_service import send_sms
 
 from .cache import cache
@@ -24,10 +22,10 @@ logger = logging.getLogger("startup")
 async def lifespan(app: FastAPI):
     logger.info("Waiting for application startup...")
 
-    try:
-        await admin_manager.connect_redis()
-    except Exception:
-        logger.exception("Admin Redis connection failed")
+    # try:
+    # await admin_manager.connect_redis()
+    # except Exception:
+    #     logger.exception("Admin Redis connection failed")
 
     try:
         print("Connecting to Cloudinary")
@@ -36,15 +34,20 @@ async def lifespan(app: FastAPI):
         print(f"Cannot connect to Cloudinary: {e}")
 
     try:
-        async with AsyncSessionLocal() as db:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        db = AsyncSessionLocal()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        try:
             await AuthRepo(db).delete_expired_blacklisted_tokens(cutoff)
-            logger.info("Blacklisted tokens cleanup completed.")
+
+        except Exception:
+            await db.rollback()
+        finally:
+            await db.close()
     except Exception:
-        logger.exception("Failed to clean up blacklisted tokens")
+        print("Failed")
 
     try:
-        await send_sms.connect()
+        await send_sms.async_connect()
         await send_sms.ping()
         logger.info("SMS service connected.")
     except Exception:
@@ -62,7 +65,6 @@ async def lifespan(app: FastAPI):
         logger.info("Upstash Redis connected.")
     except Exception:
         logger.exception("Upstash Redis connection failed")
-    
 
     try:
         await rate_limiter_manager.connect()
@@ -79,21 +81,10 @@ async def lifespan(app: FastAPI):
     # except Exception:
     #     logger.exception("Failed to start lightweight periodic pinger")
     # try:
-    #     async with AsyncSessionLocal() as db:
-    #         await BankService(db).create()
+    #    await run_autopopulate()
     # except Exception:
-    #     logger.exception("Failed to update banks ")
-
-    # try:
-    #     async with AsyncSessionLocal() as db:
-    #         await StateService(db).create_state()
-    # except Exception:
-    #     logger.exception("Failed to create or update states ")
-    # try:
-    #     async with AsyncSessionLocal() as db:
-    #         await LGAService(db).create_lga()
-    # except Exception:
-    #     logger.exception("Failed to create or update LGA ")
+    #     logger.exception("Failed to start")
+   
     logger.info("Application startup complete.")
 
     yield

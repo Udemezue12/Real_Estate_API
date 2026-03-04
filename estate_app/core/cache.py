@@ -18,6 +18,9 @@ class Cache:
     def __init__(self):
         self.redis_url = settings.UPSTASH_REDIS_URL.rstrip("/")
         self.redis_token = settings.UPSTASH_REDIS_TOKEN
+        self.async_client: httpx.AsyncClient | None = None
+        self.sync_client: httpx.Client | None = None
+
 
         if not self.redis_url or not self.redis_token:
             raise ValueError("Missing Upstash Redis environment variables")
@@ -26,6 +29,7 @@ class Cache:
             "Authorization": f"Bearer {self.redis_token}",
             "Content-Type": "application/json",
         }
+    
 
     @retry(
         stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=10)
@@ -60,7 +64,8 @@ class Cache:
                         return res.json().get("result")
                     if res.status_code == 404:
                         return None
-                    raise ConnectionError(f"Redis GET failed ({res.status_code})")
+                    raise ConnectionError(
+                        f"Redis GET failed ({res.status_code})")
             except httpx.RequestError as e:
                 logger.error("Network error during Redis GET:", exc_info=e)
             except ConnectionError as e:
@@ -70,6 +75,28 @@ class Cache:
             return None
 
         return await breaker.call(handler)
+
+    def sync_get(self, key: str) -> Optional[str]:
+
+        try:
+            encoded_key = urllib.parse.quote(str(key))
+            with httpx.Client() as client:
+                res = client.get(
+                    f"{self.redis_url}/get/{encoded_key}", headers=self.headers
+                )
+                if res.status_code == 200:
+                    return res.json().get("result")
+                if res.status_code == 404:
+                    return None
+                raise ConnectionError(
+                    f"Redis GET failed ({res.status_code})")
+        except httpx.RequestError as e:
+            logger.error("Network error during Redis GET:", exc_info=e)
+        except ConnectionError as e:
+            logger.error("Connection error during Redis GET:", exc_info=e)
+        except Exception as e:
+            logger.error("Unexpected error during Redis GET:", exc_info=e)
+        return None
 
     async def set(self, key: str, value: str, ttl: int = 3600) -> None:
         if key is None or value is None:
@@ -85,7 +112,8 @@ class Cache:
                     if res.status_code == 200:
                         logger.debug("Cache set successfully for key: %s", key)
                         return
-                    raise ConnectionError(f"Redis SET failed ({res.status_code})")
+                    raise ConnectionError(
+                        f"Redis SET failed ({res.status_code})")
             except httpx.RequestError as e:
                 logger.error("Network error during Redis SET:", exc_info=e)
             except ConnectionError as e:
@@ -94,6 +122,28 @@ class Cache:
                 logger.error("Unexpected error during Redis SET:", exc_info=e)
 
         return await breaker.call(handler)
+
+    def sync_set(self, key: str, value: str, ttl: int = 3600) -> None:
+        if key is None or value is None:
+            raise ValueError("Cache key and value cannot be None")
+
+        try:
+            encoded_key = urllib.parse.quote(str(key))
+            with httpx.AsyncClient() as client:
+                url = f"{self.redis_url}/set/{encoded_key}?ex={ttl}"
+
+                res = client.post(url, headers=self.headers, content=value)
+                if res.status_code == 200:
+                    logger.debug("Cache set successfully for key: %s", key)
+                    return
+                raise ConnectionError(
+                    f"Redis SET failed ({res.status_code})")
+        except httpx.RequestError as e:
+            logger.error("Network error during Redis SET:", exc_info=e)
+        except ConnectionError as e:
+            logger.error("Connection error during Redis SET:", exc_info=e)
+        except Exception as e:
+            logger.error("Unexpected error during Redis SET:", exc_info=e)
 
     async def delete(self, key: str) -> bool:
         async def handler():
@@ -112,6 +162,21 @@ class Cache:
 
         return await breaker.call(handler)
 
+    def sync_delete(self, key: str) -> bool:
+
+        try:
+            encoded_key = urllib.parse.quote(str(key))
+            with httpx.Client() as client:
+                res = client.post(
+                    f"{self.redis_url}/del/{encoded_key}", headers=self.headers
+                )
+                if res.status_code == 200:
+                    return True
+                return False
+        except Exception as e:
+            logger.error("Redis DELETE error:", exc_info=e)
+            return False
+
     async def get_json(self, key: str) -> Optional[Any]:
         data = await self.get(key)
         if not data:
@@ -126,7 +191,6 @@ class Cache:
         logger.debug("Setting JSON cache for key: %s", key)
         data = json.dumps(value)
         await self.set(key, data, ttl)
-       
 
     def set_json_sync(self, key: str, value: Any):
         loop = asyncio.get_event_loop()
@@ -141,6 +205,15 @@ class Cache:
         unique_keys = set(keys)
         await asyncio.gather(*(self.delete(key) for key in unique_keys))
 
+    def delete_cache_keys_sync(self, *keys: str):
+        if not keys:
+            return
+
+        unique_keys = set(keys)
+
+        for key in unique_keys:
+            self.syn_delete(key)
+
     async def get_raw(self, key: str) -> Optional[bytes]:
         data = await self.get(key)
         if not data:
@@ -149,7 +222,8 @@ class Cache:
         try:
             return base64.urlsafe_b64decode(data)
         except Exception as e:
-            logger.error("Failed to decode raw cache value for key %s", key, exc_info=e)
+            logger.error(
+                "Failed to decode raw cache value for key %s", key, exc_info=e)
             return None
 
     async def set_raw(self, key: str, value: bytes, ttl: int = 3600):

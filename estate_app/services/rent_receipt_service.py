@@ -97,10 +97,10 @@ class RentReceiptService:
             await self.repo.mark_pdf_failed(receipt)
             raise
 
-    async def create_from_payment(self, payment):
-        async def _start():
-            tenant = await self.tenant_repo.get_by_id(payment.tenant_id)
-            existing_receipt = await self.repo.get_unpaid_receipt_for_tenant(
+    def create_from_payment(self, payment):
+        
+            tenant = self.tenant_repo.sync_get_by_id(payment.tenant_id)
+            existing_receipt = self.repo.sync_get_unpaid_receipt_for_tenant(
                 payment.tenant_id
             )
             get_payment_context = self.determine_payment_context(
@@ -112,7 +112,7 @@ class RentReceiptService:
             if not tenant:
                 raise HTTPException(404, "Tenant not found")
 
-            existing = await self.payment_repo.get_payment_id(payment.id)
+            existing = self.payment_repo.sync_get_payment_id(payment.id)
             if existing:
                 return existing
             months = RENT_CYCLE_TO_MONTHS.get(tenant.rent_cycle)
@@ -133,7 +133,7 @@ class RentReceiptService:
                 existing_receipt.payment_context = get_payment_context
                 existing_receipt.payment_id = payment.id
 
-                await self.repo.db_commit_and_refresh(existing_receipt)
+                self.repo.sync_db_commit_and_refresh(existing_receipt)
 
                 receipt = existing_receipt
                 receipt_created = existing_receipt
@@ -148,7 +148,7 @@ class RentReceiptService:
                     year_paid_for=period_start.year,
                     rent_duration_months=months,
                     payment_id=payment.id,
-                    public_id=await user_generate.generate_secure_public_id(
+                    public_id=user_generate.generate_secure_public_id(
                         prefix="receipt"
                     ),
                     reference_number=f"HMT-{uuid.uuid4().hex[:40]}",
@@ -159,13 +159,13 @@ class RentReceiptService:
                 if not receipt.id:
                     raise HTTPException(404, "Not found")
 
-                receipt_created = await self.repo.create(receipt=receipt)
-                await self.repo.db_commit_and_refresh(receipt_created)
+                receipt_created = self.repo.create(receipt=receipt)
+                self.repo.sync_db_commit_and_refresh(receipt_created)
 
             tenant_email = payment.tenant_email
             landlord_name = f"{payment.landlord_firstname} {payment.landlord_middlename} {payment.landlord_lastname}"
             tenant_name = f"{payment.tenant_firstname} {payment.tenant_middlename} {payment.tenant_lastname}"
-            await self.fire_and_forget.mark_paid(
+            self.fire_and_forget.mark_paid(
                 receipt=receipt_created,
                 tenant=tenant,
                 email=tenant_email,
@@ -180,12 +180,6 @@ class RentReceiptService:
                 "reference_number": receipt.reference_number,
                 "balance": str(receipt.expected_amount - receipt.amount_paid),
             }
-
-        return await self.idempotency.run_once(
-            key=self.CREATE_LOCK_KEY,
-            coro=_start,
-            ttl=120,
-        )
 
     async def mark_as_paid(self, current_user, proof_id: uuid.UUID):
         async def _start():
@@ -224,7 +218,7 @@ class RentReceiptService:
                     year_paid_for=period_start.year,
                     rent_duration_months=months,
                     fully_paid=False,
-                    public_id=await user_generate.generate_secure_public_id(
+                    public_id=user_generate.generate_secure_public_id(
                         prefix="receipt"
                     ),
                     reference_number=f"HMT-{uuid.uuid4().hex[:40]}",

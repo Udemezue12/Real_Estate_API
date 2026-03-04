@@ -5,7 +5,7 @@ from models.enums import PayoutStatus
 from models.models import LandlordPayout
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
-
+from typing import Optional
 
 class LandLordPayoutRepo:
     def __init__(self, db):
@@ -16,8 +16,13 @@ class LandLordPayoutRepo:
             select(LandlordPayout).where(LandlordPayout.payment_id == payment_id)
         )
         return payout.scalar_one_or_none()
+    def sync_landlord_payment_id(self, payment_id: UUID) -> LandlordPayout | None:
+        payout = self.db.execute(
+            select(LandlordPayout).where(LandlordPayout.payment_id == payment_id)
+        )
+        return payout.scalar_one_or_none()
 
-    async def create(
+    def create(
         self, payment_id: UUID, landlord_id: UUID, amount: Decimal, status: PayoutStatus
     ) -> LandlordPayout:
         payout = LandlordPayout(
@@ -25,11 +30,11 @@ class LandLordPayoutRepo:
         )
         try:
             self.db.add(payout)
-            await self.db.commit()
-            await self.db.refresh(payout)
+            self.db.commit()
+            self.db.refresh(payout)
             return payout
         except SQLAlchemyError:
-            await self.db.rollback()
+            self.db.rollback()
             raise
     async def get_payout_id(self, payout_id:UUID):
         result = await self.db.execute(
@@ -37,7 +42,7 @@ class LandLordPayoutRepo:
         )
 
         return result.scalar_one_or_none()
-    async def update_status(
+    def update_status(
         self, payout_id: UUID, status: PayoutStatus
     ) -> LandlordPayout:
         stmt = (
@@ -46,11 +51,12 @@ class LandLordPayoutRepo:
             .values(status=status)
         )
         try:
-            result = await self.db.execute(stmt)
-            await self.db.commit()
-            return await self.get_payout_id(payout_id)
+            result = self.db.execute(stmt)
+            self.db.commit()
+            return result
+            
         except SQLAlchemyError:
-            await self.db.rollback()
+            self.db.rollback()
             raise
 
     async def add_commit_and_refresh(self, value):
@@ -72,4 +78,14 @@ class LandLordPayoutRepo:
 
         except SQLAlchemyError:
             await self.db.rollback()
+            raise
+    def sync_db_commit(
+        self,
+    ):
+        try:
+            self.db.commit()
+            
+
+        except SQLAlchemyError:
+            self.db.rollback()
             raise

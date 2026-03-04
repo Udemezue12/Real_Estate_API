@@ -121,3 +121,12 @@ class AuthRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
+    def sync_delete_expired_blacklisted_tokens(self, cutoff: datetime):
+        try:
+            self.db.execute(
+                delete(BlacklistedToken).where(BlacklistedToken.blacklisted_on < cutoff)
+            )
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise

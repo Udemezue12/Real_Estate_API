@@ -35,6 +35,28 @@ class SaleConversationRepo:
         except IntegrityError:
             await self.db.rollback()
             raise
+    def sync_set_viewing(
+        self,
+        *,
+        convo: SaleConversation,
+        viewing_date: Optional[datetime],
+        status: ViewingStatus,
+        set_by: UUID | None = None,
+    ) -> SaleConversation:
+        try:
+            if convo.viewing_date == viewing_date and convo.viewing_status == status:
+                return convo
+            convo.viewing_date = viewing_date
+            convo.viewing_status = status
+            convo.last_viewing_set_by = set_by
+            self.db.add(convo)
+
+            self.db.commit()
+            self.db.refresh(convo)
+            return convo
+        except IntegrityError:
+            self.db.rollback()
+            raise
 
     async def get_conversation_by_listing_id(
         self, buyer_id: UUID, listing_id: UUID
@@ -120,6 +142,16 @@ class SaleConversationRepo:
             SaleConversation.updated_at < cutoff,
         )
         result = await self.db.execute(stmt)
+        convos: List[SaleConversation] = result.scalars().all()
+        return convos
+    def sync_get_pending_conversations(self) -> List[SaleConversation]:
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+
+        stmt = select(SaleConversation).where(
+            SaleConversation.viewing_status == ViewingStatus.PENDING,
+            SaleConversation.updated_at < cutoff,
+        )
+        result = self.db.execute(stmt)
         convos: List[SaleConversation] = result.scalars().all()
         return convos
 

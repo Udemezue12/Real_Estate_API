@@ -9,20 +9,20 @@ class UpdateBankCodes:
         self.repo = UserProfileRepo(db)
         self.bank_repo = BankRepo(db)
 
-    async def update_code(self, profile_id: uuid.UUID, user_input: str):
-        bank_name = await self.bank_repo.get_name(name=user_input)
+    def update_code(self, profile_id: uuid.UUID, user_input: str):
+        bank_name = self.bank_repo.sync_get_name(name=user_input)
 
         if not bank_name:
             return
-        profile = await self.repo.get_profile(profile_id)
+        profile = self.repo.sync_get_profile(profile_id)
 
         if not profile:
             return
         if bank_name.paystack_bank_code:
-            await self.repo.update_paystack_bank_code(
+            self.repo.update_paystack_bank_code(
                 profile_id, bank_name.paystack_bank_code
             )
         if bank_name.flutterwave_bank_code:
-            await self.repo.update_flutterwave_bank_code(
+            self.repo.update_flutterwave_bank_code(
                 profile_id, bank_name.flutterwave_bank_code
             )

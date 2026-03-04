@@ -31,6 +31,27 @@ class RentLedgerRepository:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
+    def sync_create(
+        self,
+        tenant_id: UUID,
+        event: str,
+        old_value: dict | None=None,
+        new_value: dict | None=None,
+    ):
+        try:
+            ledger = RentLedger(
+                tenant_id=tenant_id,
+                event=event,
+                old_value=old_value,
+                new_value=new_value,
+            )
+            self.db.add(ledger)
+            self.db.commit()
+            self.db.refresh(ledger)
+            return ledger
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
     async def exists(self, tenant_id: UUID, event: str) -> bool:
         stmt = select(RentLedger.id).where(
@@ -38,4 +59,11 @@ class RentLedgerRepository:
             RentLedger.event == event,
         )
         result = await self.db.execute(stmt)
+        return result.first() is not None
+    def sync_exists(self, tenant_id: UUID, event: str) -> bool:
+        stmt = select(RentLedger.id).where(
+            RentLedger.tenant_id == tenant_id,
+            RentLedger.event == event,
+        )
+        result = self.db.execute(stmt)
         return result.first() is not None

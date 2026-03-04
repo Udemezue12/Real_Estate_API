@@ -5,6 +5,8 @@ from fastapi_utils.cbv import cbv
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.get_current_user import get_current_user
+from core.check_role_permissions import require_user_and_admin_user
+
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
@@ -31,7 +33,7 @@ class LettersRoutes:
         tenant_id: uuid.UUID,
         data: LetterUploadWithoutPDFSchema,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).send_letter_without_pdf_upload(
@@ -48,7 +50,7 @@ class LettersRoutes:
         property_id: uuid.UUID,
         data: LetterUploadWithoutPDFSchema,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).send_bulk_letters_without_pdf(
@@ -65,7 +67,7 @@ class LettersRoutes:
         tenant_id: uuid.UUID,
         data: LetterUploadWithPDFSchema,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).send_letter_with_pdf(
@@ -82,7 +84,7 @@ class LettersRoutes:
         property_id: uuid.UUID,
         data: LetterUploadWithPDFSchema,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).send_bulk_letters_with_pdf(
@@ -100,7 +102,7 @@ class LettersRoutes:
         page: int = 1,
         per_page=20,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).get_all_letters_for_landlord(
@@ -119,7 +121,7 @@ class LettersRoutes:
         page: int = 1,
         per_page=20,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).get_all_properties_letters(
@@ -139,7 +141,7 @@ class LettersRoutes:
         self,
         letter_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).get_single_letter_landlord(
@@ -158,7 +160,7 @@ class LettersRoutes:
         letter_id: uuid.UUID,
         property_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).get_single_property_letter(
@@ -175,7 +177,7 @@ class LettersRoutes:
         self,
         recipient_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await LetterService(db).get_single_letter_for_tenant(

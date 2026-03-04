@@ -16,6 +16,9 @@ class RentReceiptRepo:
     async def create(self, receipt: RentReceipt) -> RentReceipt:
         # self.db.add(receipt)
         return await self.db_add_and_flush(receipt)
+    def sync_create(self, receipt: RentReceipt) -> RentReceipt:
+        # self.db.add(receipt)
+        return self.sync_db_add_and_flush(receipt)
 
     async def update(self, receipt: RentReceipt) -> RentReceipt:
         # self.db.add(receipt)
@@ -39,10 +42,10 @@ class RentReceiptRepo:
         self.db.add(receipt)
         return await self._commit_and_refresh(receipt)
 
-    async def lock_for_pdf(self, receipt_id: uuid.UUID) -> Optional[RentReceipt]:
+    def lock_for_pdf(self, receipt_id: uuid.UUID) -> Optional[RentReceipt]:
         stmt = select(RentReceipt).where(RentReceipt.id == receipt_id).with_for_update()
 
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         receipt: RentReceipt | None = result.scalar_one_or_none()
 
         if not receipt:
@@ -52,7 +55,7 @@ class RentReceiptRepo:
             return receipt
 
         receipt.pdf_status = PDF_STATUS.GENERATING
-        await self.db_commit_and_refresh(receipt)
+        self.sync_db_commit_and_refresh(receipt)
 
         return receipt
 
@@ -71,6 +74,22 @@ class RentReceiptRepo:
         )
 
         result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+    def sync_get_for_pdf(self, receipt_id: uuid.UUID) -> Optional[RentReceipt]:
+        stmt = (
+            select(RentReceipt)
+            .where(RentReceipt.id == receipt_id)
+            .options(
+                selectinload(RentReceipt.property).selectinload(Property.state),
+                selectinload(RentReceipt.property).selectinload(Property.lga),
+                selectinload(RentReceipt.property).selectinload(Property.managed_by),
+                selectinload(RentReceipt.property).selectinload(Property.owner),
+                selectinload(RentReceipt.tenant).selectinload(Tenant.property),
+                selectinload(RentReceipt.landlord),
+            )
+        )
+
+        result = self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _commit_and_refresh(self, receipt: RentReceipt) -> RentReceipt:
@@ -286,6 +305,14 @@ class RentReceiptRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
+    def sync_db_add_and_flush(self, receipt: RentReceipt) -> RentReceipt:
+        try:
+            self.db.add(receipt)
+            self.db.flush()
+            return receipt
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
     async def db_commit(self):
         try:
@@ -293,9 +320,17 @@ class RentReceiptRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
-
+    def sync_db_commit(self):
+        try:
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+    
     async def db_rollback(self):
         await self.db.rollback()
+    def sync_db_rollback(self):
+        self.db.rollback()
         
 
     async def db_commit_and_refresh(self, value):
@@ -305,13 +340,30 @@ class RentReceiptRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
+    def sync_db_commit_and_refresh(self, value):
+        try:
+            self.db.commit()
+            self.db.refresh(value)
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
     async def get_unpaid_receipt_for_tenant(
-        self, tenant_id: uuid.UUID
+        self, tenant_id: uuid.UUID, fully_paid:bool=False
     ) -> RentReceipt | None:
         result = await self.db.execute(
             select(RentReceipt)
-            .where(RentReceipt.tenant_id == tenant_id, RentReceipt.fully_paid == False)
+            .where(RentReceipt.tenant_id == tenant_id, RentReceipt.fully_paid == fully_paid)
+            .order_by(RentReceipt.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+    def sync_get_unpaid_receipt_for_tenant(
+        self, tenant_id: uuid.UUID, fully_paid:bool=False
+    ) -> RentReceipt | None:
+        result = self.db.execute(
+            select(RentReceipt)
+            .where(RentReceipt.tenant_id == tenant_id, RentReceipt.fully_paid == fully_paid)
             .order_by(RentReceipt.created_at.desc())
             .limit(1)
         )

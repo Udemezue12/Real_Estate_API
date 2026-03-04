@@ -13,12 +13,12 @@ from services.rent_renewal_service import RentAmountAndRenewalService
 
 class GenerateReceiptPDF:
     def __init__(self, db):
-        
+
         self.repo = RentReceiptRepo(db)
         self.renew_service = RentAmountAndRenewalService(db)
 
-    async def generate_and_upload(self, receipt_id: uuid.UUID):
-        receipt = await self.repo.lock_for_pdf(receipt_id)
+    def generate_and_upload(self, receipt_id: uuid.UUID):
+        receipt = self.repo.lock_for_pdf(receipt_id)
 
         if not receipt:
             raise ValueError("Receipt not found")
@@ -27,9 +27,9 @@ class GenerateReceiptPDF:
             return
 
         receipt.pdf_status = PDF_STATUS.GENERATING
-        await self.repo.db_commit()
+        self.repo.sync_db_commit()
 
-        receipt = await self.repo.get_for_pdf(receipt_id)
+        receipt = self.repo.sync_get_for_pdf(receipt_id)
 
         if not receipt:
             raise ValueError("Receipt disappeared after lock")
@@ -40,13 +40,13 @@ class GenerateReceiptPDF:
             if not settings.SECRET_KEY:
                 raise ValueError("SECRET_KEY is not configured")
             if not receipt.barcode_reference:
-                receipt.barcode_reference = await user_generate.hmac_sha256(
+                receipt.barcode_reference = user_generate.hmac_sha256(
                     value=f"{receipt.id}:{receipt.amount}",
                     secret=settings.SECRET_KEY,
                 )
             pdf_path = ReceiptGenerator.generate_pdf(receipt)
 
-            upload_result = await cloudinary_client.upload_pdf_with_signature(
+            upload_result = cloudinary_client.upload_pdf_with_signature(
                 pdf_path,
                 public_id=receipt.public_id,
                 folder="receipts",
@@ -57,17 +57,17 @@ class GenerateReceiptPDF:
             receipt.pdf_status = PDF_STATUS.READY
             receipt.receipt_path = upload_result["secure_url"]
 
-            await self.repo.db_commit()
+            self.repo.sync_db_commit()
 
-            await self.renew_service.renew_from_receipt(receipt)
+            self.renew_service.renew_from_receipt(receipt)
 
         except Exception:
-            await self.repo.db_rollback()
+            self.repo.db_rollback()
             receipt.pdf_status = PDF_STATUS.FAILED
-            await cloudinary_client.safe_delete_cloudinary(
+            cloudinary_client.sync_delete(
                 public_id=receipt.public_id, resource_type="raw"
             )
-            await self.repo.db_commit()
+            self.repo.sync_db_commit()
             raise
 
         finally:

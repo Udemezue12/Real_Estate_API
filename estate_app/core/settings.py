@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     FLUTTERWAVE_BASE_URL: str = "https://api.flutterwave.com/v3"
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
     REDIRECT_URL: str | None = os.getenv("REDIRECT_URL")
-    DATABASE_URL: str | None = os.getenv("DATABASE_URL")
+    ASYNC_DATABASE_URL: str | None = os.getenv("ASYNC_DATABASE_URL")
+    SYNC_DATABASE_URL: str | None = os.getenv("SYNC_DATABASE_URL")
     RENDER_DATABASE_URL: str | None = os.getenv("RENDER_DATABASE_URL")
     PROJECT_NAME: str = "REAL ESTATE MANAGEMENT And SALES SYSTEM"
     RATE_LIMIT_REDIS_URL: str = (

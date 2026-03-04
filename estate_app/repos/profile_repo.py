@@ -150,11 +150,33 @@ class UserProfileRepo:
             await self.db.rollback()
             raise
 
-    async def get_profile(self, profile_id: uuid.UUID) -> UserProfile:
+    async def get_profile(self, profile_id: uuid.UUID) -> Optional[UserProfile]:
         result = await self.db.execute(
             select(UserProfile)
             .options(selectinload(UserProfile.user))
             .where(UserProfile.id == profile_id)
+        )
+        return result.scalar_one_or_none()
+    def sync_get_profile(self, profile_id: uuid.UUID) -> Optional[UserProfile]:
+        result = self.db.execute(
+            select(UserProfile)
+            .options(selectinload(UserProfile.user))
+            .where(UserProfile.id == profile_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_by_user(self, user_id: uuid.UUID) -> UserProfile:
+        result = await self.db.execute(
+            select(UserProfile)
+            .options(selectinload(UserProfile.user))
+            .where(UserProfile.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+    def sync_get_by_user(self, user_id: uuid.UUID) -> UserProfile:
+        result = self.db.execute(
+            select(UserProfile)
+            .options(selectinload(UserProfile.user))
+            .where(UserProfile.user_id == user_id)
         )
         return result.scalar_one_or_none()
 
@@ -168,13 +190,7 @@ class UserProfileRepo:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_user(self, user_id: uuid.UUID) -> UserProfile:
-        result = await self.db.execute(
-            select(UserProfile)
-            .options(selectinload(UserProfile.user))
-            .where(UserProfile.user_id == user_id)
-        )
-        return result.scalar_one_or_none()
+    
 
     async def update(
         self,
@@ -236,13 +252,13 @@ class UserProfileRepo:
         deleted = result.scalar_one_or_none()
         return deleted
 
-    async def mark_nin_verified(
+    def mark_nin_verified(
         self,
         profile_id: uuid.UUID,
         nin_verification_provider: NINVerificationProviders,
     ):
         try:
-            stmt = await self.db.execute(
+            stmt = self.db.execute(
                 update(UserProfile)
                 .where(UserProfile.id == profile_id)
                 .values(
@@ -253,15 +269,15 @@ class UserProfileRepo:
                     nin_verification_provider=nin_verification_provider,
                 )
             )
-            await self.db.commit()
+            self.db.commit()
 
             return stmt
         except SQLAlchemyError:
-            await self.db.rollback()
+            self.db.rollback()
             raise
 
-    async def mark_nin_verification_failed(self, profile_id: uuid.UUID, nin_error: str):
-        await self.db.execute(
+    def mark_nin_verification_failed(self, profile_id: uuid.UUID, nin_error: str):
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -273,12 +289,12 @@ class UserProfileRepo:
             )
         )
 
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def mark_bvn_verified(
+    def mark_bvn_verified(
         self, profile_id: uuid.UUID, bvn_verification_provider: BVNVerificationProviders
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -289,9 +305,9 @@ class UserProfileRepo:
                 bvn_verification_provider=bvn_verification_provider,
             )
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def mark_flutterwave_account_number_verified(
+    def mark_flutterwave_account_number_verified(
         self,
         profile_id: uuid.UUID,
         account_verification_provider: AccountVerificationProviders,
@@ -299,7 +315,7 @@ class UserProfileRepo:
         account_name: str,
         bank_code: str,
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -313,9 +329,9 @@ class UserProfileRepo:
                 flutterwave_account_name=account_name,
             )
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def mark_paystack_account_number_verified(
+    def mark_paystack_account_number_verified(
         self,
         profile_id: uuid.UUID,
         account_verification_provider: AccountVerificationProviders,
@@ -323,7 +339,7 @@ class UserProfileRepo:
         account_name: str,
         bank_code: str,
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -337,12 +353,12 @@ class UserProfileRepo:
                 paystack_account_name=account_name,
             )
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def mark_paystack_account_number_verification_failed(
+    def mark_paystack_account_number_verification_failed(
         self, profile_id: uuid.UUID, account_verification_error: str | None = None
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -353,12 +369,12 @@ class UserProfileRepo:
                 paystack_account_verified_at=None,
             )
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def mark_flutterwave_account_number_verification_failed(
+    def mark_flutterwave_account_number_verification_failed(
         self, profile_id: uuid.UUID, account_verification_error: str | None = None
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -369,12 +385,12 @@ class UserProfileRepo:
                 flutterwave_account_verified_at=None,
             )
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def mark_bvn_verification_failed(
+    def mark_bvn_verification_failed(
         self, profile_id: uuid.UUID, bvn_error: str | None = None
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(
@@ -385,27 +401,27 @@ class UserProfileRepo:
                 bvn_verified_at=None,
             )
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def update_flutterwave_bank_code(
+    def update_flutterwave_bank_code(
         self, profile_id: uuid.UUID, flutterwave_bank_code: str
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(flutterwave_bank_code=flutterwave_bank_code)
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
-    async def update_paystack_bank_code(
+    def update_paystack_bank_code(
         self, profile_id: uuid.UUID, paystack_bank_code: str
     ):
-        await self.db.execute(
+        self.db.execute(
             update(UserProfile)
             .where(UserProfile.id == profile_id)
             .values(paystack_bank_code=paystack_bank_code)
         )
-        await self.db_commit()
+        self.sync_db_commit()
 
     async def set_paystack_code(
         self, profile_id: uuid.UUID, paystack_receipent_code: str
@@ -416,6 +432,15 @@ class UserProfileRepo:
             .values(paystack_recipient_code=paystack_receipent_code)
         )
         await self.db_commit()
+    def sync_set_paystack_code(
+        self, profile_id: uuid.UUID, paystack_receipent_code: str
+    ):
+        self.db.execute(
+            update(UserProfile)
+            .where(UserProfile.id == profile_id)
+            .values(paystack_recipient_code=paystack_receipent_code)
+        )
+        self.sync_db_commit()
 
     async def db_commit_and_refresh(self, value):
         try:
@@ -435,4 +460,12 @@ class UserProfileRepo:
             await self.db.commit()
         except SQLAlchemyError:
             await self.db.rollback()
+            raise
+    async def sync_db_commit(
+        self,
+    ):
+        try:
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
             raise

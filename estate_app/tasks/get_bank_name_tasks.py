@@ -1,11 +1,11 @@
 import logging
 
 import httpx
-from asyncio import run as async_run
+
 
 from celery import shared_task
 
-from core.get_db import AsyncSessionLocal
+from core.get_db import SyncSessionLocal
 from services.bank_service import BankService
 
 logger = logging.getLogger("bank_names")
@@ -18,11 +18,15 @@ logger = logging.getLogger("bank_names")
     retry_kwargs={"max_retries": 3},
 )
 def create_bank_name_tasks():
-    return async_run(create())
+    return create()
 
 
-async def create():
-    async with AsyncSessionLocal() as db:
-        return await BankService(db).create()
+def create():
+    db = SyncSessionLocal()
+    try:
 
-
+        return BankService(db).create()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()

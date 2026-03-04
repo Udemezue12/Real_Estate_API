@@ -12,21 +12,21 @@ class ExpirePendingConverstaion:
         self.rental_repo = RentalConversationRepo(db)
         self.rental_log_repo = RentalViewHistoryRepo(db)
 
-    async def expire_pending_sales(self):
-        convos = await self.sale_repo.get_pending_conversations()
+    def expire_pending_sales(self):
+        convos = self.sale_repo.sync_get_pending_conversations()
         expired_count = 0
 
         for convo in convos:
             if convo.viewing_status != ViewingStatus.PENDING:
                 continue
 
-            await self.sale_repo.set_viewing(
+            self.sale_repo.sync_set_viewing(
                 convo=convo,
                 viewing_date=None,
                 status=ViewingStatus.DECLINED,
                 set_by=None,
             )
-            await self.sale_log_repo.log_viewing_change(
+            self.sale_log_repo.sync_log_viewing_change(
                 convo_id=convo.id,
                 old_status=ViewingStatus.PENDING,
                 new_status=ViewingStatus.DECLINED,
@@ -35,21 +35,22 @@ class ExpirePendingConverstaion:
             expired_count += 1
 
         return expired_count
-    async def expire_pending_rentals(self):
-        convos = await self.rental_repo.get_pending_conversations()
+
+    def expire_pending_rentals(self):
+        convos = self.rental_repo.sync_get_pending_conversations()
         expired_count = 0
 
         for convo in convos:
             if convo.viewing_status != ViewingStatus.PENDING:
                 continue
 
-            await self.rental_repo.set_viewing(
+            self.rental_repo.sync_set_viewing(
                 convo=convo,
                 viewing_date=None,
                 status=ViewingStatus.DECLINED,
                 set_by=None,
             )
-            await self.rental_log_repo.log_viewing_change(
+            self.rental_log_repo.sync_log_viewing_change(
                 convo_id=convo.id,
                 old_status=ViewingStatus.PENDING,
                 new_status=ViewingStatus.DECLINED,

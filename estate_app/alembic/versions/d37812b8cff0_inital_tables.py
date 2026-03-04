@@ -1,8 +1,8 @@
-"""create initial tables
+"""inital tables
 
-Revision ID: a92d96bfd840
+Revision ID: d37812b8cff0
 Revises: 
-Create Date: 2026-02-03 23:02:16.923359
+Create Date: 2026-03-04 15:33:03.728463
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from geoalchemy2 import Geography
 
 # revision identifiers, used by Alembic.
-revision: str = 'a92d96bfd840'
+revision: str = 'd37812b8cff0'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -214,7 +214,7 @@ def upgrade() -> None:
     sa.Column('default_rent_amount', sa.Integer(), nullable=True),
     sa.Column('default_rent_cycle', sa.String(length=20), nullable=True),
     sa.Column('house_type', sa.Enum('SELF_CON', 'ONE_BEDROOM_FLAT', 'TWO_BEDROOM_FLAT', 'THREE_BEDROOM_FLAT', 'DUPLEX', 'BUNGALOW', name='housetype', native_enum=False), nullable=False),
-    sa.Column('property_type', sa.Enum('LAND', 'BUNGALOW', 'DUPLEX', 'TERRACE', 'FLAT', 'SELF_CON', 'COMMERCIAL_BUILDING', 'OFFICE_SPACE', name='propertytypes', native_enum=False), nullable=False),
+    sa.Column('property_type', sa.Enum('RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL', 'MIXED_USE', 'LAND', 'AGRICULTURAL', 'HOSPITALITY', 'EDUCATIONAL', 'HEALTHCARE', 'RELIGIOUS', name='propertytypes', native_enum=False), nullable=False),
     sa.Column('is_available', sa.Boolean(), nullable=False),
     sa.Column('is_verified', sa.Boolean(), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
@@ -263,12 +263,13 @@ def upgrade() -> None:
     sa.Column('rent_duration', sa.Enum('YEARLY', 'QUARTERLY', 'MONTHLY', name='rentduration', native_enum=False), nullable=False),
     sa.Column('furnished_level', sa.Enum('FURNISHED', 'SEMI_FURNISHED', 'UNFURNISHED', name='furnishing', native_enum=False), nullable=False),
     sa.Column('house_type', sa.Enum('SELF_CON', 'ONE_BEDROOM_FLAT', 'TWO_BEDROOM_FLAT', 'THREE_BEDROOM_FLAT', 'DUPLEX', 'BUNGALOW', name='housetype', native_enum=False), nullable=False),
-    sa.Column('property_type', sa.Enum('LAND', 'BUNGALOW', 'DUPLEX', 'TERRACE', 'FLAT', 'SELF_CON', 'COMMERCIAL_BUILDING', 'OFFICE_SPACE', name='propertytypes', native_enum=False), nullable=False),
+    sa.Column('property_type', sa.Enum('RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL', 'MIXED_USE', 'LAND', 'AGRICULTURAL', 'HOSPITALITY', 'EDUCATIONAL', 'HEALTHCARE', 'RELIGIOUS', name='propertytypes', native_enum=False), nullable=False),
     sa.Column('parking_spaces', sa.Integer(), nullable=True),
     sa.Column('bathrooms', sa.Integer(), nullable=True),
     sa.Column('toilets', sa.Integer(), nullable=True),
     sa.Column('rooms', sa.Integer(), nullable=False),
     sa.Column('rent_amount', sa.Numeric(precision=12, scale=2), nullable=False),
+    sa.Column('rent_cycle', sa.Enum('MONTHLY', 'YEARLY', 'QUARTERLY', name='rentcycle', native_enum=False), nullable=False),
     sa.Column('contact_phone', sa.String(length=20), nullable=False),
     sa.Column('slug', sa.String(length=255), nullable=True),
     sa.Column('is_available', sa.Boolean(), nullable=False),
@@ -277,7 +278,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.Column('verified_by_id', sa.UUID(), nullable=True),
     sa.Column('verified_at', sa.DateTime(), nullable=True),
-    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('unavailable_at', sa.DateTime(), nullable=True),
     sa.Column('available_again_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['lga_id'], ['local_government_areas.id'], ),
@@ -294,6 +295,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_rental_listings_is_verified'), 'rental_listings', ['is_verified'], unique=False)
     op.create_index(op.f('ix_rental_listings_listed_by_id'), 'rental_listings', ['listed_by_id'], unique=False)
     op.create_index(op.f('ix_rental_listings_property_type'), 'rental_listings', ['property_type'], unique=False)
+    op.create_index(op.f('ix_rental_listings_rent_cycle'), 'rental_listings', ['rent_cycle'], unique=False)
     op.create_index(op.f('ix_rental_listings_rent_duration'), 'rental_listings', ['rent_duration'], unique=False)
     op.create_index(op.f('ix_rental_listings_rental_listed_by'), 'rental_listings', ['rental_listed_by'], unique=False)
     op.create_table('sale_listings',
@@ -745,6 +747,7 @@ def downgrade() -> None:
     op.drop_table('sale_listings')
     op.drop_index(op.f('ix_rental_listings_rental_listed_by'), table_name='rental_listings')
     op.drop_index(op.f('ix_rental_listings_rent_duration'), table_name='rental_listings')
+    op.drop_index(op.f('ix_rental_listings_rent_cycle'), table_name='rental_listings')
     op.drop_index(op.f('ix_rental_listings_property_type'), table_name='rental_listings')
     op.drop_index(op.f('ix_rental_listings_listed_by_id'), table_name='rental_listings')
     op.drop_index(op.f('ix_rental_listings_is_verified'), table_name='rental_listings')

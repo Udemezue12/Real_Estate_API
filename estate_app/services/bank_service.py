@@ -7,6 +7,8 @@ from core.paginate import PaginatePage
 from core.redis_idempotency import RedisIdempotency
 from fintechs.flutterwave import FlutterwaveClient
 from fintechs.paystack import PaystackClient
+from fintechs.syncFlutterwave import FlutterwaveClient as SyncFlutterwaveClient
+from fintechs.syncPaystack import PaystackClient as SyncPaystackClient
 from repos.bank_repo import BankRepo
 from schemas.schema import BankOut
 
@@ -20,6 +22,8 @@ class BankService:
         self.db = db
         self.repo: BankRepo = BankRepo(db)
         self.paystack = PaystackClient()
+        self.syncPaystack = SyncPaystackClient()
+        self.syncFlutterwave=SyncFlutterwaveClient()
         self.paginate: PaginatePage = PaginatePage()
         self.mapper: ORMMapper = ORMMapper()
         self.flutterwave = FlutterwaveClient()
@@ -62,6 +66,38 @@ class BankService:
             coro=_sync,
             ttl=120,
         )
+    def sync_create(self):
+        
+            # if not await self.repo.needs_sync():
+            #     logger.info("Bank sync skipped (already complete)")
+            #     return
+
+            logger.info("Starting bank sync...")
+
+            paystack_banks = self.syncPaystack.get_banks()
+            flutterwave_banks =  self.syncFlutterwave.get_banks()
+
+            flutter_map: dict[str, str] = {
+                get_canonical_bank_name(b["name"]): b["code"] for b in flutterwave_banks
+            }
+
+            for bank in paystack_banks:
+                raw_name = bank["name"].strip()
+                canonical = get_canonical_bank_name(raw_name)
+
+                flutter_code = flutter_map.get(canonical)
+
+                self.repo.sync_create_or_update(
+                    name=raw_name,
+                    canonical_name=canonical,
+                    paystack_bank_code=bank["code"],
+                    flutterwave_bank_code=flutter_code,
+                )
+
+            logger.info("Bank sync completed successfully")
+            cache.delete_cache_keys_sync("banks:all")
+
+        
 
     async def get_banks(
         self,

@@ -76,7 +76,8 @@ class LetterRepo:
         result = await self.db.execute(
             select(Letter)
             .where(
-                (Letter.owner_id == user_id) | (Letter.caretaker_id == user_id),
+                (Letter.owner_id == user_id) | (
+                    Letter.caretaker_id == user_id),
                 Letter.id == letter_id,
                 Letter.property_id == property_id,
             )
@@ -256,6 +257,27 @@ class LetterRepo:
             await self.db.rollback()
             raise
 
+    async def sync_create_letter_recipient(
+        self, tenant_id: uuid.UUID, letter_id: uuid.UUID, property_id: uuid.UUID
+    ):
+        try:
+            recipient = LetterRecipient(
+                letter_id=letter_id,
+                property_id=property_id,
+                tenant_id=tenant_id,
+                is_read=False,
+                read_at=None,
+            )
+
+            self.db.add(recipient)
+            self.db.commit()
+            self.db.refresh(recipient)
+            return recipient
+
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+
     async def get_by_hash(self, property_id: uuid.UUID, file_hash: str):
         stmt = select(Letter).where(
             Letter.property_id == property_id,
@@ -264,22 +286,28 @@ class LetterRepo:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def bulk_create_letter_recipient(
+    def bulk_create_letter_recipient(
         self, tenant_ids: list[uuid.UUID], letter_id: uuid.UUID, property_id: uuid.UUID
     ):
-        recipients = [
-            LetterRecipient(
-                letter_id=letter_id,
-                tenant_id=tenant_id,
-                property_id=property_id,
-                is_read=False,
-                read_at=None,
-            )
-            for tenant_id in tenant_ids
-        ]
+        try:
+            recipients = [
+                LetterRecipient(
+                    letter_id=letter_id,
+                    tenant_id=tenant_id,
+                    property_id=property_id,
+                    is_read=False,
+                    read_at=None,
+                )
+                for tenant_id in tenant_ids
+            ]
 
-        self.db.add_all(recipients)
-        return recipients
+            self.db.add_all(recipients)
+            self.db.commit()
+            return recipients
+
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
     async def update_is_read(
         self, letter_recipient_id: uuid.UUID, is_read: bool = True

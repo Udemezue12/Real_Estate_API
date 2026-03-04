@@ -13,8 +13,8 @@ class RentAmountAndRenewalService:
         self.tenant_repo: TenantRepo = TenantRepo(db)
         self.ledger_repo: RentLedgerRepository = RentLedgerRepository(db)
 
-    async def renew_from_receipt(self, receipt: RentReceipt):
-        tenant = await self.tenant_repo.get_by_id(receipt.tenant_id)
+    def renew_from_receipt(self, receipt: RentReceipt):
+        tenant =self.tenant_repo.sync_get_by_id(receipt.tenant_id)
 
         if not tenant or tenant.matched_user_id is None:
             raise HTTPException(404, "Not Found")
@@ -25,7 +25,7 @@ class RentAmountAndRenewalService:
         new_start = tenant.rent_expiry_date
         new_expiry = calculate_expiry(new_start, rent_cycle)
 
-        await self.tenant_repo.update(
+        self.tenant_repo.sync_update(
             user_id=tenant.matched_user_id,
             tenant_id=tenant.id,
             new_rent_start_date=new_start,
@@ -33,7 +33,7 @@ class RentAmountAndRenewalService:
             new_rent_cycle=rent_cycle,
         )
 
-        await self.ledger_repo.create(
+        self.ledger_repo.create(
             tenant.id,
             "RENT_RENEWED",
             old_value={"rent_expiry_date": str(old_expiry)},

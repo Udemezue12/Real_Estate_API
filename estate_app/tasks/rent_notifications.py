@@ -4,7 +4,7 @@ import httpx
 import asyncio
 from celery import shared_task
 
-from core.get_db import AsyncSessionLocal
+from core.get_db import SyncSessionLocal
 from services.rent_service import RentService
 
 logger = logging.getLogger("rent.notifications")
@@ -18,9 +18,14 @@ logger = logging.getLogger("rent.notifications")
     retry_kwargs={"max_retries": 3},
 )
 def create_rent_notification_task():
-    return asyncio.run(process())
+    return process_rent()
 
 
-async def process():
-    async with AsyncSessionLocal() as session:
-        return await RentService(session).process_rent_notifications_using_celery()
+def process_rent():
+    db=SyncSessionLocal()
+    try:
+        return RentService(db).process_rent_notifications_using_celery()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()

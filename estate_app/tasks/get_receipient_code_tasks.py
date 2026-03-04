@@ -5,7 +5,7 @@ import httpx
 
 from celery import shared_task
 
-from core.get_db import AsyncSessionLocal
+from core.get_db import SyncSessionLocal
 from services.get_recipient_code_service import GetRecipientCode
 
 
@@ -20,33 +20,14 @@ def create_receipient_code_task(profile_id: str):
 
     if not profile_uuid:
         raise ValueError("Invalid profile_id")
-    async_run(get_code(profile_uuid))
-    return profile_uuid
+    return get_code(profile_uuid)
 
 
-async def get_code(profile_id: uuid.UUID):
-    async with AsyncSessionLocal() as db:
-        return await GetRecipientCode(db).get_code(profile_id)
-
-
-# def create_receipient_code_task(app):
-#     class GetReceipientCodeTask(app.Task):
-#         name = "get_receipient_code"
-
-#         autoretry_for = (httpx.HTTPError, ConnectionError, RuntimeError)
-#         retry_backoff = True
-#         max_retries = 3
-
-#         def run(self, profile_id: str):
-#             profile_uuid = uuid.UUID(profile_id)
-
-#             if not profile_uuid:
-#                 raise ValueError("Invalid profile_id")
-#             return asyncio_run.run_async(self._get_code(profile_uuid))
-
-#         async def _get_code(self, profile_id: uuid.UUID):
-#             async with AsyncSessionLocal() as db:
-#                 return await GetRecipientCode(db).get_code(profile_id)
-
-
-#     return GetReceipientCodeTask
+def get_code(profile_id: uuid.UUID):
+    db = SyncSessionLocal()
+    try:
+        return GetRecipientCode(db).get_code(profile_id)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()

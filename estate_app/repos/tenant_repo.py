@@ -137,6 +137,36 @@ class TenantRepo:
         result = await self.db.execute(stmt)
         updated = result.scalar_one_or_none()
         return updated
+    def sync_update(
+        self,
+        user_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        new_rent_amount: Decimal | None = None,
+        new_rent_cycle: RentCycle | None = None,
+        new_rent_start_date: date | None = None,
+        new_rent_expiry_date: date | None = None,
+    ) -> Optional[Tenant]:
+        values = {}
+        if new_rent_amount is not None:
+            values["rent_amount"] = new_rent_amount
+        if new_rent_cycle is not None:
+            values["rent_cycle"] = new_rent_cycle
+        if new_rent_start_date is not None:
+            values["rent_start_date"] = new_rent_start_date
+        if new_rent_expiry_date is not None:
+            values["rent_expiry_date"] = new_rent_expiry_date
+
+        stmt = (
+            update(Tenant)
+            .where(Tenant.id == tenant_id, Tenant.matched_user_id == user_id)
+            .values(**values)
+            .returning(Tenant)
+        )
+
+        result = self.db.execute(stmt)
+        updated = result.scalar_one_or_none()
+        return updated
 
     async def delete(self, tenant_id: uuid.UUID) -> int:
         try:
@@ -152,6 +182,10 @@ class TenantRepo:
     async def get_by_id(self, tenant_id: uuid.UUID) -> Optional[Tenant]:
         stmt = select(Tenant).where(Tenant.id == tenant_id)
         result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+    def sync_get_by_id(self, tenant_id: uuid.UUID) -> Optional[Tenant]:
+        stmt = select(Tenant).where(Tenant.id == tenant_id)
+        result = self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_by_matched_id(self, matched_user_id: uuid.UUID) -> Optional[Tenant]:
@@ -276,19 +310,34 @@ class TenantRepo:
             raise
 
     async def get_tenants_expiring_in(
-        self, days: int, offset: int = 0, limit: int = 20
+        self, days: int, is_active:bool=True,offset: int = 0, limit: int = 20
     ) -> Tenant:
         target_date = date.today() + timedelta(days=days)
 
         stmt = (
             select(Tenant)
-            .where(Tenant.is_active == True)
+            .where(Tenant.is_active == is_active)
             .where(Tenant.rent_expiry_date == target_date)
             .order_by(Tenant.id)
             .offset(offset)
             .limit(limit)
         )
         result = await self.db.execute(stmt)
+        return result.scalars().all()
+    def sync_get_tenants_expiring_in(
+        self, days: int,is_active:bool=True, offset: int = 0, limit: int = 20
+    ) -> Tenant:
+        target_date = date.today() + timedelta(days=days)
+
+        stmt = (
+            select(Tenant)
+            .where(Tenant.is_active == is_active)
+            .where(Tenant.rent_expiry_date == target_date)
+            .order_by(Tenant.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = self.db.execute(stmt)
         return result.scalars().all()
 
     async def get_expired_active_tenants(self, limit: int = 20, offset: int = 0):
@@ -304,6 +353,19 @@ class TenantRepo:
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
+    def sync_get_expired_active_tenants(self, limit: int = 20, offset: int = 0):
+        stmt = (
+            (
+                select(Tenant)
+                .where(Tenant.is_active == True)
+                .where(Tenant.rent_expiry_date < date.today())
+            )
+            .order_by(Tenant.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = self.db.execute(stmt)
+        return result.scalars().all()
 
     async def activate_or_deactivate(self, tenant_id: uuid.UUID, is_active: bool):
         try:
@@ -311,11 +373,23 @@ class TenantRepo:
                 update(Tenant).where(Tenant.id == tenant_id).values(is_active=is_active)
             )
             results = await self.db.execute(stmt)
-            await self.db_commit()
+            await self.sync_db_commit()
             return results
 
         except SQLAlchemyError:
             await self.db.rollback()
+            raise
+    def sync_activate_or_deactivate(self, tenant_id: uuid.UUID, is_active: bool):
+        try:
+            stmt = (
+                update(Tenant).where(Tenant.id == tenant_id).values(is_active=is_active)
+            )
+            results = self.db.execute(stmt)
+            self.db_commit()
+            return results
+
+        except SQLAlchemyError:
+            self.db.rollback()
             raise
 
     async def db_commit(self):
@@ -323,6 +397,20 @@ class TenantRepo:
             await self.db.commit()
         except SQLAlchemyError:
             await self.db.rollback()
+            raise
+
+    async def sync_db_commit_and_refresh(self, value):
+        try:
+            self.db.commit()
+            self.db.refresh(value)
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+    def sync_db_commit(self):
+        try:
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
             raise
 
     async def db_commit_and_refresh(self, value):

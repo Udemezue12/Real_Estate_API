@@ -1,10 +1,9 @@
 import uuid
 
 import httpx
-from asyncio import run as async_run
 from celery import shared_task
 
-from core.get_db import AsyncSessionLocal
+from core.get_db import SyncSessionLocal
 from services.update_bank_codes import UpdateBankCodes
 
 
@@ -20,12 +19,18 @@ def update_bank_code_task( profile_id: str, user_input: str):
     if not profile_uuid:
         raise ValueError("Invalid profile_id")
 
-    return async_run(update_code(profile_uuid, user_input))
+    return update_code(profile_uuid, user_input)
     
 
 
-async def update_code(profile_id: uuid.UUID, user_input: str):
-    async with AsyncSessionLocal() as db:
-        return await UpdateBankCodes(db).update_code(
+def update_code(profile_id: uuid.UUID, user_input: str):
+    db=SyncSessionLocal() 
+    try:
+        return UpdateBankCodes(db).update_code(
             profile_id=profile_id, user_input=user_input
         )
+    except Exception:
+            db.rollback()
+    finally:
+            db.close()
+    

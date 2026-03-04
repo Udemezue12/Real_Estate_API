@@ -2,11 +2,11 @@ import logging
 import uuid
 
 import httpx
-from asyncio import run as async_run
+
 
 from celery import shared_task
 
-from core.get_db import AsyncSessionLocal
+from core.get_db import SyncSessionLocal
 from services.autopayout_service import AutoPayoutService
 
 logger = logging.getLogger("auto_payouts")
@@ -29,8 +29,13 @@ def create_auto_payout_task(
     if not payment_uuid:
         raise ValueError("Invalid payment_id")
 
-    return async_run(process_payment(payment_id=payment_uuid))
+    return process_payment(payment_id=payment_uuid)
 
-async def process_payment(payment_id: uuid.UUID):
-    async with AsyncSessionLocal() as db:
-        return await AutoPayoutService(db).process_payment(payment_id)
+def process_payment(payment_id: uuid.UUID):
+    db=SyncSessionLocal()
+    try:
+        return  AutoPayoutService(db).process_payment(payment_id)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()

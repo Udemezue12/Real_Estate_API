@@ -82,6 +82,13 @@ class PropertyRepo:
             .options(selectinload(Property.owner).selectinload(User.profile))
         )
         return result.scalar_one_or_none()
+    def sync_get_by_id(self, property_id: uuid.UUID) -> Property | None:
+        result = self.db.execute(
+            select(Property)
+            .where(Property.id == property_id)
+            .options(selectinload(Property.owner).selectinload(User.profile))
+        )
+        return result.scalar_one_or_none()
 
     async def get_one(self, property_id: uuid.UUID):
         query = (

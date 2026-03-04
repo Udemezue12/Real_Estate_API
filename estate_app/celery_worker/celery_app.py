@@ -1,3 +1,18 @@
+import tasks.delete_blacklisted_tokens_tasks
+import tasks.youverify_nin_tasks
+import tasks.update_bank_codes_tasks
+import tasks.send_letter_tasks
+import tasks.rent_notifications
+import tasks.receipt_tasks
+import tasks.qoreid_nin_task
+import tasks.process_payment_transfer_tasks
+import tasks.prembly_nin_tasks
+import tasks.prembly_bvn_tasks
+import tasks.get_receipient_code_tasks
+import tasks.get_bank_name_tasks
+import tasks.expire_pending_sales_viewings
+import tasks.expire_pending_rental_viewings
+import tasks.account_name_match_tasks
 from celery import Celery
 from celery.schedules import crontab
 
@@ -31,6 +46,10 @@ celery_app.conf.update(
             "task": "process_rent_notifications",
             "schedule": crontab(hour=1, minute=0),
         },
+        "delete_blacklisted_tokens": {
+            "task": "delete_blackisted_tokens",
+            "schedule": crontab(hour=1, minute=0)
+        }
     },
     broker_connection_retry=True,
     broker_connection_retry_on_startup=True,
@@ -69,20 +88,5 @@ async def connect():
 def delay(func_name: str, *args, **kwargs):
     return celery_app.send_task(func_name, args=args, kwargs=kwargs)
 
-
-import tasks.account_name_match_tasks
-import tasks.expire_pending_rental_viewings
-import tasks.expire_pending_sales_viewings
-import tasks.get_bank_name_tasks
-import tasks.get_receipient_code_tasks
-import tasks.prembly_bvn_tasks
-import tasks.prembly_nin_tasks
-import tasks.process_payment_transfer_tasks
-import tasks.qoreid_nin_task
-import tasks.receipt_tasks
-import tasks.rent_notifications
-import tasks.send_letter_tasks
-import tasks.update_bank_codes_tasks
-import tasks.youverify_nin_tasks
 
 app = celery_app

@@ -114,6 +114,16 @@ class PaymentTransactionRepo:
             .where(PaymentTransaction.id == payment_id)
         )
         return result.scalar_one_or_none()
+    def sync_get_payment_id(self, payment_id: uuid.UUID) -> PaymentTransaction:
+        result = self.db.execute(
+            select(PaymentTransaction)
+            .options(
+                selectinload(PaymentTransaction.tenant),
+                selectinload(PaymentTransaction.property),
+            )
+            .where(PaymentTransaction.id == payment_id)
+        )
+        return result.scalar_one_or_none()
 
     async def update_payment_id(
         self,

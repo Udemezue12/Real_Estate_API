@@ -32,3 +32,25 @@ class RentalViewHistoryRepo:
         except IntegrityError:
             await self.db.rollback()
             raise
+    def sync_log_viewing_change(
+        self,
+        *,
+        convo_id: UUID,
+        old_status: ViewingStatus,
+        new_status: ViewingStatus,
+        user_id: UUID | None = None,
+    ):
+        try:
+            log = RentalViewingHistory(
+                convo_id=convo_id,
+                old_status=old_status,
+                new_status=new_status,
+                changed_by=user_id,
+            )
+            self.db.add(log)
+            self.db.commit()
+            self.db.refresh(log)
+            return log
+        except IntegrityError:
+            self.db.rollback()
+            raise

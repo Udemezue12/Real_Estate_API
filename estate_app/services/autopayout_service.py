@@ -24,16 +24,16 @@ class AutoPayoutService:
         self.landlord_payout = LandLordPayoutRepo(db)
         self.property_repo = PropertyRepo(db)
 
-    async def process_payment(self, payment_id: uuid.UUID):
-        payment = await self.payment_repo.get_payment_id(payment_id)
+    def process_payment(self, payment_id: uuid.UUID):
+        payment = self.payment_repo.sync_get_payment_id(payment_id)
         if payment.status != PaymentStatus.VERIFIED:
             return
-        property = await self.property_repo.get_by_id(payment.property_id)
+        property = self.property_repo.sync_get_by_id(payment.property_id)
         if not property:
             raise ValueError("Property not found")
         landlord_user = property.owner
 
-        landlord_profile = await self.profile.get_by_user(landlord_user.id)
+        landlord_profile = self.profile.sync_get_by_user(landlord_user.id)
         if not landlord_profile:
             raise ValueError("Landlord profile missing")
 
@@ -50,12 +50,12 @@ class AutoPayoutService:
         if not recipient:
             raise ValueError("No recipient code")
         try:
-            payout = await self.landlord_payout.get_landlord_payment_id(payment_id)
+            payout = self.landlord_payout.sync_landlord_payment_id(payment_id)
             if payout and payout.status == PayoutStatus.COMPLETED:
                 return
             amount = Decimal(str(payment.amount_received))
             if not payout:
-                payout = await self.landlord_payout.create(
+                payout =  self.landlord_payout.create(
                     payment_id=payment_id,
                     landlord_id=payment.landlord_id,
                     amount=amount,
@@ -63,29 +63,29 @@ class AutoPayoutService:
                 )
             payout_id = payout.id
 
-            await self.landlord_payout.update_status(
+            self.landlord_payout.update_status(
                 payout_id=payout_id, status=PayoutStatus.PROCESSING
             )
 
-            response = await self.payout_service.transfer_to_landlord(
+            response = self.payout_service.transfer_to_landlord(
                 provider=payment.payment_provider,
                 payment=payment,
                 amount=amount,
                 landlord_profile=landlord_profile,
             )
-            landlord_response = await self.landlord_payout.update_status(
+            landlord_response = self.landlord_payout.update_status(
                 payout_id=payout_id, status=PayoutStatus.COMPLETED
             )
             payout.provider_reference = response["reference"]
-            await self.landlord_payout.db_commit()
+            self.landlord_payout.sync_db_commit()
             if landlord_response.status == PayoutStatus.COMPLETED:
-                await self.rent_receipt.create_from_payment(payment)
-                await self.tenant_repo.activate_or_deactivate(
+                self.rent_receipt.create_from_payment(payment)
+                self.tenant_repo.sync_activate_or_deactivate(
                     tenant_id=payment.tenant_id, is_active=True
                 )
 
         except Exception as e:
             logger.exception("Auto Payout Failed %s", str(e))
-            await self.landlord_payout.update_status(
+            self.landlord_payout.update_status(
                 payout_id=payout_id, status=PayoutStatus.FAILED
             )

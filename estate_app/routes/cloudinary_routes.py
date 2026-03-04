@@ -1,10 +1,11 @@
-from typing import List
+
 
 from fastapi import APIRouter, Depends, Query
 from fastapi_utils.cbv import cbv
 
 from core.cloudinary_setup import cloudinary_client
 from core.get_current_user import get_current_user
+from core.check_role_permissions import  require_admin_user
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
 from core.validators import validate_csrf_dependency
@@ -63,7 +64,7 @@ class CloudinaryRoutes:
     async def delete(
         self,
         data: UploadSingleDeleteRequest,
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await cloudinary_client.delete_image(
@@ -75,7 +76,7 @@ class CloudinaryRoutes:
     async def delete_multiple(
         self,
         data: UploadDeleteRequest,
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await cloudinary_client.delete_images(
@@ -90,11 +91,9 @@ class CloudinaryRoutes:
         folder: str | None = None,
         max_results: int = 50,
         next_cursor: str | None = None,
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_admin_user),
     ):
-        # 🔐 enforce admin access
-        # if not current_user.is_admin:
-        #     raise HTTPException(status_code=403, detail="Admin access required")
+       
 
         return await cloudinary_client.list_resources(
             resource_type=resource_type,

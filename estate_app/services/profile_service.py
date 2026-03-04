@@ -75,7 +75,7 @@ class UserProfileService:
 
     async def get(self, profile_id: uuid.UUID, current_user):
         async def handler():
-            await self.permission.check_authenticated(current_user=current_user)
+            
             profile = await self.repo.get_profile_by_user(
                 profile_id=profile_id, user_id=current_user.id
             )
@@ -98,7 +98,7 @@ class UserProfileService:
     async def create(self, current_user, data):
         async def _start():
             user_id = current_user.id
-            await self.permission.check_authenticated(current_user=current_user)
+            
             if await self.repo.get_by_user(user_id=user_id):
                 raise HTTPException(400, "User profile already exists")
             await self.enforce_daily_quota(user_id=user_id)
@@ -228,7 +228,7 @@ class UserProfileService:
         self, profile_id: uuid.UUID, current_user, data, resource_type: str = "images"
     ):
         async def handler():
-            await self.permission.check_authenticated(current_user=current_user)
+            
             profile = await self.repo.get_profile_by_user(
                 user_id=current_user.id, profile_id=profile_id
             )
@@ -287,7 +287,7 @@ class UserProfileService:
         
     ):
         async def _start():
-            await self.permission.check_authenticated(current_user=current_user)
+            
             profile = await self.repo.get_profile_by_user(
                 user_id=current_user.id, profile_id=profile_id
             )

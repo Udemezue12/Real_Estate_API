@@ -29,7 +29,7 @@ class UserGenerate:
         key = request.headers.get("Idempotency-Key")
         return key or str(uuid.uuid4())
 
-    async def hmac_sha256(self, value: str, secret: str) -> str:
+    def hmac_sha256(self, value: str, secret: str) -> str:
         return (
             hmac.new(
                 key=secret.encode(),
@@ -40,7 +40,7 @@ class UserGenerate:
             .upper()
         )
 
-    async def generate_secure_public_id(
+    def generate_secure_public_id(
         self,
         prefix: str | None = None,
         length: int = 32,

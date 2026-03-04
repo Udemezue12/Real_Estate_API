@@ -53,7 +53,6 @@ class BankRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
-
     async def needs_sync(self) -> bool:
         result = await self.db.execute(
             select(Bank).where(
@@ -64,21 +63,100 @@ class BankRepo:
             )
         )
         return result.first() is not None
+    def sync_create_or_update(
+        self,
+        *,
+        name: str,
+        canonical_name: str,
+        paystack_bank_code: str | None = None,
+        flutterwave_bank_code: str | None = None,
+    ) -> Bank:
+        bank = self.sync_get_name(name)
+
+        try:
+            if not bank:
+                bank = Bank(
+                    name=name,
+                    canonical_name=canonical_name,
+                    paystack_bank_code=paystack_bank_code,
+                    flutterwave_bank_code=flutterwave_bank_code,
+                )
+                self.db.add(bank)
+            else:
+                if paystack_bank_code is not None:
+                    bank.paystack_bank_code = paystack_bank_code
+                if flutterwave_bank_code is not None:
+                    bank.flutterwave_bank_code = flutterwave_bank_code
+
+            self.db.commit()
+            self.db.refresh(bank)
+            return bank
+
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+
+    async def sync_needs_sync(self) -> bool:
+        
+        result =self.db.execute(
+            select(Bank).where(
+                or_(
+                    Bank.paystack_bank_code.is_(None),
+                    Bank.flutterwave_bank_code.is_(None),
+                )
+            )
+        )
+         
+        return result.first() is not None
 
     async def update_paystack_bank_code(self, bank_id: uuid.UUID, bank_code: str):
-        await self.db.execute(
+        try: 
+            await self.db.execute(
             update(Bank).where(Bank.id == bank_id).values(paystack_bank_code=bank_code)
         )
 
-        await self.db_commit()
+         
+            await self.db_commit()
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise
+    def sync_update_paystack_bank_code(self, bank_id: uuid.UUID, bank_code: str):
+        try:
+         
+            self.db.execute(
+            update(Bank).where(Bank.id == bank_id).values(paystack_bank_code=bank_code)
+        )
 
-    async def update_flutterwave_bank_code(self, bank_id: uuid.UUID, bank_code: str):
-        await self.db.execute(
+         
+            self.db_commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+
+    def sync_update_flutterwave_bank_code(self, bank_id: uuid.UUID, bank_code: str):
+        try:
+            self.db.execute(
             update(Bank)
             .where(Bank.id == bank_id)
             .values(flutterwave_bank_code=bank_code)
         )
-        await self.db_commit()
+         
+            self.db_commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+    async def update_flutterwave_bank_code(self, bank_id: uuid.UUID, bank_code: str):
+        try:
+            await self.db.execute(
+            update(Bank)
+            .where(Bank.id == bank_id)
+            .values(flutterwave_bank_code=bank_code)
+        )
+         
+            await self.db_commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
     async def get_by_id(self, bank_id: uuid.UUID) -> Bank | None:
         result = await self.db.execute(select(Bank).where(Bank.id == bank_id))
@@ -94,6 +172,9 @@ class BankRepo:
 
     async def get_name(self, name: str) -> Optional[Bank]:
         result = await self.db.execute(select(Bank).where(Bank.name == name))
+        return result.scalar_one_or_none()
+    def sync_get_name(self, name: str) -> Optional[Bank]:
+        result = self.db.execute(select(Bank).where(Bank.name == name))
         return result.scalar_one_or_none()
 
     async def get_all_banks(self) -> list[Bank]:

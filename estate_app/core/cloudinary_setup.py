@@ -2,7 +2,7 @@ import asyncio
 import time
 import uuid
 from pathlib import Path
-
+import functools
 import cloudinary
 import cloudinary.api
 import cloudinary.uploader
@@ -28,9 +28,10 @@ class CloudinaryClient:
     ) -> None:
         now = int(time.time())
         try:
-           timestamp = int(timestamp)
+            timestamp = int(timestamp)
         except (TypeError, ValueError):
-            raise HTTPException(status_code=400,detail="Invalid timestamp format")
+            raise HTTPException(
+                status_code=400, detail="Invalid timestamp format")
         if now - timestamp > ttl_seconds:
             raise HTTPException(
                 status_code=400,
@@ -68,7 +69,6 @@ class CloudinaryClient:
 
             timestamp = int(time.time())
             await self.validate_signature_timestamp(timestamp)
-            
 
             eager = "f_auto,q_auto"
 
@@ -173,14 +173,15 @@ class CloudinaryClient:
                 "cloud_name": cloudinary.config().cloud_name,
                 "folder": folder,
                 "resource_type": "video",
-                
+
                 "allowed_formats": allowed_formats,
-                "max_file_size": MAX_FILE_SIZE,  
-                "max_duration": 60,  
+                "max_file_size": MAX_FILE_SIZE,
+                "max_duration": 60,
             }
 
         except Exception as e:
-            raise HTTPException(500, f"Failed to generate video upload signature: {e}")
+            raise HTTPException(
+                500, f"Failed to generate video upload signature: {e}")
 
     async def get_pdf_signed_upload_params(
         self,
@@ -195,7 +196,8 @@ class CloudinaryClient:
             params_to_sign = {
                 "timestamp": timestamp,
                 "folder": folder,
-                "resource_type": "raw",  # Add to enforce raw type (for non-media files like PDF)
+                # Add to enforce raw type (for non-media files like PDF)
+                "resource_type": "raw",
                 "allowed_formats": "pdf"
             }
             if public_id:
@@ -222,7 +224,7 @@ class CloudinaryClient:
                 f"Failed to generate upload signature: {e}",
             )
 
-    async def upload_pdf_with_signature(
+    def upload_pdf_with_signature(
         self,
         file_path: Path | None,
         folder: str = "receipts",
@@ -243,7 +245,7 @@ class CloudinaryClient:
         except Exception as e:
             raise HTTPException(500, f"Signed PDF upload failed: {e}")
 
-    async def delete_image(self, public_id: str, resource_type:str) -> dict:
+    async def delete_image(self, public_id: str, resource_type: str) -> dict:
         try:
             loop = asyncio.get_running_loop()
 
@@ -254,20 +256,34 @@ class CloudinaryClient:
                 invalidate=True,
             )
 
-            return await loop.run_in_executor(None, func)  
+            return await loop.run_in_executor(None, func)
+        except Exception as e:
+            raise HTTPException(500, f"Failed to delete image: {e}")
+
+    def sync_delete(self, public_id: str, resource_type: str) -> dict:
+        try:
+
+            func = cloudinary.uploader.destroy(
+                public_id,
+                resource_type=resource_type,
+                invalidate=True)
+
+            return func
         except Exception as e:
             raise HTTPException(500, f"Failed to delete image: {e}")
 
     async def delete_images(self, public_ids: list[str]) -> dict:
         if not public_ids:
-            raise HTTPException(status_code=400, detail="No public_ids provided")
+            raise HTTPException(
+                status_code=400, detail="No public_ids provided")
 
         try:
             loop = asyncio.get_running_loop()
 
             result = await loop.run_in_executor(
                 None,
-                lambda: cloudinary.api.delete_resources(public_ids, invalidate=True),
+                lambda: cloudinary.api.delete_resources(
+                    public_ids, invalidate=True),
             )
 
             return {
@@ -304,7 +320,8 @@ class CloudinaryClient:
 
     async def resource_exists(self, public_id: str, resource_type: str = "raw") -> bool:
         try:
-            info = cloudinary.api.resource(public_id, resource_type=resource_type)
+            info = cloudinary.api.resource(
+                public_id, resource_type=resource_type)
             return True if info else False
             print(f"Details: {info}")
         except cloudinary.exceptions.NotFound:
@@ -341,13 +358,13 @@ class CloudinaryClient:
                 detail=f"Failed to list Cloudinary resources: {e}",
             )
 
-    async def safe_delete_cloudinary(self, public_id: str, resource_type:str):
+    async def safe_delete_cloudinary(self, public_id: str, resource_type: str):
         try:
-            await self.delete_image(public_id,resource_type=resource_type)
+            await self.delete_image(public_id, resource_type=resource_type)
         except Exception:
             pass
 
-    async def safe_delete_many_cloudinary(self, public_ids: list[str], resource_type:str):
+    async def safe_delete_many_cloudinary(self, public_ids: list[str], resource_type: str):
         try:
             await self.delete_images(public_ids)
         except Exception:

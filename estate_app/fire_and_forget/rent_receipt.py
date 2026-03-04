@@ -15,7 +15,6 @@ class AsyncioRentReceipt:
         receipt,
         tenant,
     ):
-       
 
         create_receipt_tasks.delay(str(receipt.id))
 
@@ -34,7 +33,7 @@ class AsyncioRentReceipt:
             },
         )
 
-    async def mark_paid(
+    def mark_paid(
         self,
         receipt,
         tenant,
@@ -42,25 +41,17 @@ class AsyncioRentReceipt:
         landlord_name: str,
         tenant_name: str,
     ):
-        
 
         create_receipt_tasks.delay(str(receipt.id))
 
-        await cache.delete_cache_keys_async(
+        cache.delete_cache_keys_sync(
             f"tenant:{tenant.id}:receipt:{receipt.id}:property"
             f"tenant:{tenant.id}:receipts:property:{receipt.property_id}",
             f"property:{receipt.property_id}:receipts ",
             f"property:{receipt.property_id}:receipt:{receipt.id}",
         )
 
-        await publish_event(
-            "rent_receipts.created",
-            {
-                "receipt_id": str(receipt.id),
-                "tenant_id": str(tenant.id),
-            },
-        )
-        await self.email_service.send_rent_processed_mail(
+        self.email_service.sync_send_rent_processed_mail(
             email=email,
             landlord_name=landlord_name,
             tenant_name=tenant_name,

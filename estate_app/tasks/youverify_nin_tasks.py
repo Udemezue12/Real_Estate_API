@@ -1,13 +1,13 @@
 import logging
 import uuid
 
-import asyncio
+
 
 
 import httpx
 from celery import shared_task
 
-from core.get_db import AsyncSessionLocal
+from core.get_db import SyncSessionLocal
 from models.enums import NINVerificationProviders
 from services.verification_service import VerificationService
 logger = logging.getLogger("nin.youverify")
@@ -24,13 +24,18 @@ def create_youverify_nin_task(profile_id: str, nin: str):
 
     if not profile_uuid:
         raise ValueError("Invalid profile_id")
-    return asyncio.run(verify_nin(profile_uuid, nin))
+    return verify_nin(profile_uuid, nin)
 
 
-async def verify_nin(profile_id: uuid.UUID, nin: str):
-    async with AsyncSessionLocal() as db:
-        return await VerificationService(db).verify_nin(
+def verify_nin(profile_id: uuid.UUID, nin: str):
+    db=SyncSessionLocal()
+    try:
+        return VerificationService(db).verify_nin(
             profile_id=profile_id,
             nin=nin,
             nin_verification_provider=NINVerificationProviders.YOU_VERIFY,
         )
+    except Exception:
+            db.rollback()
+    finally:
+            db.close()
