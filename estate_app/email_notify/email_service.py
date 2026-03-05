@@ -41,6 +41,48 @@ class EmailService:
 
         return await breaker.call(smtp_operation)
 
+    def sync_send_refund_email(self, email: str, name: str, amount: str):
+        html_content = f"""
+      <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #d9534f;">Refund Confirmation</h2>
+
+        <p>Dear {name},</p>
+
+        <p>
+            We would like to inform you that your recent payment of 
+            <strong>{amount}</strong> has been successfully refunded.
+        </p>
+
+        <p>
+            The refunded amount will reflect in your bank account or card 
+            according to your financial institution's processing timeline.
+        </p>
+
+        <p>
+            If you have any questions or require further assistance, 
+            please contact our support team.
+        </p>
+
+        <p>
+            Thank you for your patience and understanding.
+        </p>
+
+        <br>
+        <p>Best regards,<br>
+        <strong>Your Support Team</strong></p>
+    </body>
+    </html>
+    """
+
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Refund Confirmation Notice"
+        message["From"] = settings.EMAIL_USER
+        message["To"] = email
+        message.attach(MIMEText(html_content, "html"))
+
+        self.sync_send(message=message)
+
     async def send_rent_paid_email(
         self, email: str, landlord_name: str, tenant_name: str, amount
     ):
@@ -63,6 +105,29 @@ class EmailService:
         message.attach(MIMEText(html_content, "html"))
 
         await self.async_send(message=message)
+
+    def sync_send_rent_paid_email(
+        self, email: str, landlord_name: str, tenant_name: str, amount
+    ):
+
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h2>Rent Payment Notification</h2>
+            <p>Hello {landlord_name},</p>
+            <p> {tenant_name} has paid rent of {amount}</p>
+            <p>Best regards,<br>Your Support Team</p>
+        </body>
+        </html>
+        """
+
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Rent Expired Notice"
+        message["From"] = settings.EMAIL_USER
+        message["To"] = email
+        message.attach(MIMEText(html_content, "html"))
+
+        self.sync_send(message=message)
 
     async def send_rent_reminder_email(self, email: str, days_left: int, name: str):
 
@@ -155,10 +220,10 @@ class EmailService:
     async def send_verification_email(
         self, email: str, otp: str, token: str, name: str
     ):
-        
-            verify_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
 
-            html_content = f"""
+        verify_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+
+        html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Email Verification</h2>
@@ -176,19 +241,18 @@ class EmailService:
         </html>
         """
 
-            message = MIMEMultipart("alternative")
-            message["Subject"] = "Verify Your Email"
-            message["From"] = settings.EMAIL_USER
-            message["To"] = email
-            message.attach(MIMEText(html_content, "html"))
-            await self.async_send(message=message)
-
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Verify Your Email"
+        message["From"] = settings.EMAIL_USER
+        message["To"] = email
+        message.attach(MIMEText(html_content, "html"))
+        await self.async_send(message=message)
 
     async def send_password_reset_link(self, email: str, otp: str, token: str):
-       
-            reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
 
-            html_content = f"""
+        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+
+        html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Email Verification</h2>
@@ -206,20 +270,18 @@ class EmailService:
         </html>
         """
 
-            message = MIMEMultipart("alternative")
-            message["Subject"] = "Reset Your Password"
-            message["From"] = settings.EMAIL_USER
-            message["To"] = email
-            message.attach(MIMEText(html_content, "html"))
-            await self.async_send(message=message)
-
-        
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Reset Your Password"
+        message["From"] = settings.EMAIL_USER
+        message["To"] = email
+        message.attach(MIMEText(html_content, "html"))
+        await self.async_send(message=message)
 
     async def send_rent_processed_mail(
         self, email: str, landlord_name: str, tenant_name: str, path: str
     ):
-        
-            html_content = f"""
+
+        html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Rent Payment Successfully Processed</h2>
@@ -234,18 +296,19 @@ class EmailService:
         </html>
         """
 
-            message = MIMEMultipart("alternative")
-            message["Subject"] = "Rent Payment Successfully Processed"
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Rent Payment Successfully Processed"
 
-            message["From"] = settings.EMAIL_USER
-            message["To"] = email
-            message.attach(MIMEText(html_content, "html"))
-            await self.async_send(message=message)
+        message["From"] = settings.EMAIL_USER
+        message["To"] = email
+        message.attach(MIMEText(html_content, "html"))
+        await self.async_send(message=message)
+
     def sync_send_rent_processed_mail(
         self, email: str, landlord_name: str, tenant_name: str, path: str
     ):
-        
-            html_content = f"""
+
+        html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Payment Successful</h2>
@@ -260,11 +323,9 @@ class EmailService:
         </html>
         """
 
-            message = MIMEMultipart("alternative")
-            message["Subject"] = "Rent Payment Successfully Processed"
-            message["From"] = settings.EMAIL_USER
-            message["To"] = email
-            message.attach(MIMEText(html_content, "html"))
-            self.sync_send(message=message)
-
-        
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Rent Payment Successfully Processed"
+        message["From"] = settings.EMAIL_USER
+        message["To"] = email
+        message.attach(MIMEText(html_content, "html"))
+        self.sync_send(message=message)

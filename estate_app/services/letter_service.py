@@ -61,7 +61,8 @@ class LetterService:
                 property_id=property_id, tenant_id=tenant_id
             )
             if not tenant:
-                raise HTTPException(400, "Tenant is not assigned to this property")
+                raise HTTPException(
+                    400, "Tenant is not assigned to this property")
             if not tenant.matched_user_verified:
                 raise HTTPException(400, "Tenant not matched yet")
 
@@ -95,7 +96,7 @@ class LetterService:
             return {"status": "OK", "message": "Letter sent successfully"}
 
         return await self.redis_idempotency.run_once(
-            key=self.TEXT_LOCK, coro=_sync, ttl=120
+            key=f"{self.TEXT_LOCK}:{current_user.id}:{tenant_id}:{property_id}:{data.letter_type}", coro=_sync, ttl=120
         )
 
     async def send_letter_with_pdf(
@@ -113,7 +114,8 @@ class LetterService:
                 property_id=property_id, tenant_id=tenant_id
             )
             if not tenant:
-                raise HTTPException(400, "Tenant is not assigned to this property")
+                raise HTTPException(
+                    400, "Tenant is not assigned to this property")
             if not tenant.matched_user_verified:
                 raise HTTPException(400, "Tenant not matched yet")
 
@@ -137,7 +139,6 @@ class LetterService:
             )
             await self.repo.db_commit()
 
-            
             task_app.send_task(
                 name="send_single_letter",
                 args=[
@@ -158,7 +159,7 @@ class LetterService:
             return {"status": "OK", "message": "Letter sent successfully"}
 
         return await self.redis_idempotency.run_once(
-            key=self.PDF_LOCK, coro=_sync, ttl=120
+            key=f"{self.PDF_LOCK}:{current_user.id}:{tenant_id}:{property_id}:{data.letter_type}", coro=_sync, ttl=120
         )
 
     async def send_bulk_letters_with_pdf(
@@ -214,7 +215,7 @@ class LetterService:
             return {"status": "OK", "message": "Letter sent successfully"}
 
         return await self.redis_idempotency.run_once(
-            key=self.BULK_PDF_LOCK, coro=_sync, ttl=120
+            key=f"{self.BULK_PDF_LOCK}:{current_user.id}:{property_id}:{data.letter_type}", coro=_sync, ttl=120
         )
 
     async def send_bulk_letters_without_pdf(
@@ -258,7 +259,7 @@ class LetterService:
             return {"status": "OK", "message": "Letter sent successfully"}
 
         return await self.redis_idempotency.run_once(
-            key=self.BULK_TEXT_LOCK, coro=_sync, ttl=120
+            key=f"{self.BULK_TEXT_LOCK}:{current_user.id}:{property_id}:{data.letter_type}", coro=_sync, ttl=120
         )
 
     async def get_all_letters_for_landlord(
@@ -275,10 +276,12 @@ class LetterService:
             if not props:
                 return []
             props_dicts = self.mapper.many(items=props, schema=LetterSchemaOut)
-            paginated_props = self.paginate.paginate(props_dicts, page, per_page)
+            paginated_props = self.paginate.paginate(
+                props_dicts, page, per_page)
             await self.cache.set_json(
                 cache_key,
-                self.paginate.get_list_json_dumps(paginated_props=paginated_props),
+                self.paginate.get_list_json_dumps(
+                    paginated_props=paginated_props),
                 ttl=300,
             )
             return paginated_props
@@ -307,10 +310,12 @@ class LetterService:
             if not props:
                 return []
             props_dicts = self.mapper.many(items=props, schema=LetterSchemaOut)
-            paginated_props = self.paginate.paginate(props_dicts, page, per_page)
+            paginated_props = self.paginate.paginate(
+                props_dicts, page, per_page)
             await self.cache.set_json(
                 cache_key,
-                self.paginate.get_list_json_dumps(paginated_props=paginated_props),
+                self.paginate.get_list_json_dumps(
+                    paginated_props=paginated_props),
                 ttl=300,
             )
             return paginated_props
@@ -437,11 +442,14 @@ class LetterService:
             props = await self.repo.get_all_tenant_letters(tenant_id=tenant_id)
             if not props:
                 return []
-            props_dicts = self.mapper.many(items=props, schema=LetterRecipientOut)
-            paginated_props = self.paginate.paginate(props_dicts, page, per_page)
+            props_dicts = self.mapper.many(
+                items=props, schema=LetterRecipientOut)
+            paginated_props = self.paginate.paginate(
+                props_dicts, page, per_page)
             await self.cache.set_json(
                 cache_key,
-                self.paginate.get_list_json_dumps(paginated_props=paginated_props),
+                self.paginate.get_list_json_dumps(
+                    paginated_props=paginated_props),
                 ttl=300,
             )
             return paginated_props

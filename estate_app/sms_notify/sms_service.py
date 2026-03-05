@@ -257,6 +257,82 @@ class TermiiClient:
             return response.json()
         finally:
             await self.async_close()
+    def sync_send_refund_sms(
+        self,
+        to: str,
+        amount: str,
+        message: str | None = None,
+        name: str | None = None,
+        sender_id=settings.TERMII_SENDER_ID,
+    ):
+        try:
+            self.sync_connect()
+            if not message:
+                if name:
+                    message = (
+                        f"Hello {name}, we have issued a refund for payment of {amount}.\n\n"
+                        "Thank you for your understanding."
+                    )
+                else:
+                    message = (
+                        f"We have issued a refund for the {amount}.\n\n"
+                        "Thank you for your prompt understanding."
+                    )
+
+            payload = {
+                "to": to,
+                "from": sender_id,
+                "sms": message,
+                "type": "plain",
+                "channel": "generic",
+                "api_key": self.api_key,
+            }
+
+            if not self.async_client:
+                raise RuntimeError("Termii client not connected")
+
+            response = self.sync_client.post("/api/sms/send", json=payload)
+            return response.json()
+        finally:
+            self.sync_close()
+    def sync_send_tenant_rent_paid_sms(
+        self,
+        to: str,
+        amount: str,
+        message: str | None = None,
+        tenant_name: str | None = None,
+        sender_id=settings.TERMII_SENDER_ID,
+    ):
+        try:
+            self.sync_connect()
+            if not message:
+                if tenant_name:
+                    message = (
+                        f"Hello {tenant_name}, we have received your rent payment of {amount}.\n\n"
+                        "Thank you for your prompt payment."
+                    )
+                else:
+                    message = (
+                        f"We have received your rent payment of {amount}.\n\n"
+                        "Thank you for your prompt payment."
+                    )
+
+            payload = {
+                "to": to,
+                "from": sender_id,
+                "sms": message,
+                "type": "plain",
+                "channel": "generic",
+                "api_key": self.api_key,
+            }
+
+            if not self.async_client:
+                raise RuntimeError("Termii client not connected")
+
+            response =  self.sync_client.post("/api/sms/send", json=payload)
+            return response.json()
+        finally:
+             self.sync_close()
 
     async def rent_paid_sms(
         self,
@@ -293,6 +369,41 @@ class TermiiClient:
             return response.json()
         finally:
             await self.async_close()
+    def sync_rent_paid_sms(
+        self,
+        to: str,
+        amount: str,
+        message: str | None = None,
+        landlord_name: str | None = None,
+        tenant_name: str | None = None,
+        sender_id=settings.TERMII_SENDER_ID,
+    ):
+        try:
+            self.sync_connect()
+            if not message:
+                if landlord_name:
+                    message = (
+                        f"Hello {landlord_name}, your tenant with the name {tenant_name} has paid rent of {amount}.\n\n"
+                        "Thank you."
+                    )
+                else:
+                    message = f"Your tenant has paid rent of {amount}.\n\nThank you."
+
+            payload = {
+                "to": to,
+                "from": sender_id,
+                "sms": message,
+                "type": "plain",
+                "channel": "generic",
+                "api_key": self.api_key,
+            }
+            if not self.async_client:
+                raise RuntimeError("Termii client not connected")
+
+            response = ync_client.post("/api/sms/send", json=payload)
+            return response.json()
+        finally:
+            ync_close()
 
 
 send_sms = TermiiClient()

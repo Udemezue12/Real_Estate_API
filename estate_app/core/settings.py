@@ -25,6 +25,10 @@ class Settings(BaseSettings):
         f"redis://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
         f"@{os.getenv('CELERY_REDIS_HOST')}:{os.getenv('CELERY_REDIS_PORT')}/0"
     )
+    CELERY_REDIS_URLL: str | None = (
+        f"redis://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
+        f"@{os.getenv('CELERY_REDIS_HOST')}:{os.getenv('CELERY_REDIS_PORT')}"
+    )
     RABBITMQ_MAIN_EXCHANGE: str = "location_events"
     RABBITMQ_URL: str = os.getenv("RABBITMQ_URL", "")
     RABBITMQ_DLX: str = "dead_letter_exchange"

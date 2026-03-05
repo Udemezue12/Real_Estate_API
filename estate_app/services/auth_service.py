@@ -32,7 +32,7 @@ refresh_exp = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_EXPIR
 
 class AuthService:
     REGISTER_LOCK_KEY = "register-auth-service-v2"
-    LOGIN_LOCK_KEY = "login-auth-service-v2"
+    VERIFY_EMAIL_KEY = "login-auth-service-v2"
 
     def __init__(self, db):
         self.repo: AuthRepo = AuthRepo(db)
@@ -99,7 +99,7 @@ class AuthService:
             )
 
         return await self.redis_idempotency.run_once(
-            key=self.REGISTER_LOCK_KEY,
+            key=f"{self.REGISTER_LOCK_KEY}:{data.email}:{data.username}",
             coro=_handler,
             ttl=300,
         )

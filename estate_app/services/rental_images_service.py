@@ -36,7 +36,8 @@ class RentalListingImageService:
         self.compute: ComputeFileHash = ComputeFileHash()
         self.mapper: ORMMapper = ORMMapper()
         self.permission: CheckRolePermission = CheckRolePermission()
-        self.redis_idempotency = RedisIdempotency("rental-images-service-startup")
+        self.redis_idempotency = RedisIdempotency(
+            "rental-images-service-startup")
 
     async def enforce_daily_quota(self, user_id: uuid.UUID):
         today_start = (
@@ -53,7 +54,8 @@ class RentalListingImageService:
         )
 
         if count >= MAX_DAILY_UPLOADS:
-            raise HTTPException(status_code=429, detail="Daily upload limit reached")
+            raise HTTPException(
+                status_code=429, detail="Daily upload limit reached")
 
     async def get_all_images(
         self, current_user, listing_id: uuid.UUID, page: int = 1, per_page: int = 20
@@ -93,7 +95,8 @@ class RentalListingImageService:
                 listing_id=rent_listing_id, image_hash=image_hash
             )
             if existing:
-                raise HTTPException(400, "This image has already been uploaded")
+                raise HTTPException(
+                    400, "This image has already been uploaded")
 
             image = await self.repo.create(
                 listing_id=rent_listing_id,
@@ -119,7 +122,7 @@ class RentalListingImageService:
             return {"id": str(image.id), "url": image.image_path}
 
         return await self.redis_idempotency.run_once(
-            key=self.CREATE_LOCK_KEY,
+            key=f"{self.CREATE_LOCK_KEY}:{current_user.id}:{rent_listing_id}:{image_url}",
             coro=_handler,
             ttl=300,
         )
@@ -188,7 +191,7 @@ class RentalListingImageService:
             return {"id": str(updated.id), "url": updated.image_path}
 
         return await self.redis_idempotency.run_once(
-            key=self.UPDATE_LOCK_KEY,
+            key=f"{self.UPDATE_LOCK_KEY}:{current_user.id}:{secure_url}",
             coro=_sync,
             ttl=300,
         )
@@ -225,7 +228,7 @@ class RentalListingImageService:
             return {"deleted": True, "id": str(image.id)}
 
         return await self.redis_idempotency.run_once(
-            key=self.DELETE_LOCK_KEY,
+            key=f"{self.DELETE_LOCK_KEY}:{current_user.id}:{image_id}",
             coro=_sync,
             ttl=300,
         )

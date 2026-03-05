@@ -38,6 +38,7 @@ MAX_DAILY_UPLOADS = 1
 
 class UserProfileService:
     CREATE_LOCK_KEY = "create-profile-v2"
+    UPDATE_LOCK_KEY = "update-profile-v2"
     DELETE_LOCK_KEY = "delete-profile-v2"
 
     def __init__(self, db):
@@ -192,7 +193,7 @@ class UserProfileService:
             return self.mapper.one(profile_created, UserProfileSchemaOut)
 
         return await self.idempotency.run_once(
-            key=self.CREATE_LOCK_KEY,
+            key=f"{self.CREATE_LOCK_KEY}:{current_user.id}",
             coro=_start,
             ttl=120,
         )
@@ -227,7 +228,7 @@ class UserProfileService:
     async def update(
         self, profile_id: uuid.UUID, current_user, data, resource_type: str = "images"
     ):
-        async def handler():
+        async def _handler():
             
             profile = await self.repo.get_profile_by_user(
                 user_id=current_user.id, profile_id=profile_id
@@ -278,12 +279,16 @@ class UserProfileService:
 
             return self.mapper.one(updated, UserProfileSchemaOut)
 
-        return await breaker.call(handler)
+        return await self.idempotency.run_once(
+            key=f"{self.UPDATE_LOCK_KEY}:{current_user.id}",
+            coro=_handler,
+            ttl=120,
+        )
 
     async def delete(
         self,
         profile_id: uuid.UUID,
-        current_user,
+        current_user
         
     ):
         async def _start():
@@ -316,7 +321,7 @@ class UserProfileService:
             }
 
         return await self.idempotency.run_once(
-            key=self.DELETE_LOCK_KEY,
+            key=f"{self.DELETE_LOCK_KEY}:{current_user.id}",
             coro=_start,
             ttl=120,
         )

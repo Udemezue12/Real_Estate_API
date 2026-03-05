@@ -16,8 +16,7 @@ class CheckRolePermission:
         if current_user.role not in {
             UserRole.ADMIN,
             UserRole.USER,
-            UserRole.LANDLORD,
-            UserRole.TENANT,
+
         }:
             raise HTTPException(
                 status_code=403,
@@ -28,8 +27,7 @@ class CheckRolePermission:
         if current_user.role in {
             UserRole.ADMIN,
             UserRole.USER,
-            UserRole.LANDLORD,
-            UserRole.TENANT,
+            
         }:
             raise HTTPException(
                 status_code=400,
@@ -40,8 +38,7 @@ class CheckRolePermission:
         if role not in {
             UserRole.ADMIN,
             UserRole.USER,
-            UserRole.LANDLORD,
-            UserRole.TENANT,
+            
         }:
             raise HTTPException(
                 status_code=400,

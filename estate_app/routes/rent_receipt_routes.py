@@ -5,6 +5,7 @@ from fastapi_utils.cbv import cbv
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.get_current_user import get_current_user
+from core.check_role_permissions import require_admin_user, require_user_and_admin_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
@@ -24,7 +25,7 @@ class RentReceiptRoutes:
         self,
         proof_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).mark_as_paid(
@@ -39,7 +40,7 @@ class RentReceiptRoutes:
         proof_id: uuid.UUID,
         data: RejectProofSchema,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).reject_proof(
@@ -52,7 +53,7 @@ class RentReceiptRoutes:
         self,
         receipt_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).download_receipt(
@@ -65,7 +66,7 @@ class RentReceiptRoutes:
         self,
         reference: str,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).verify_receipt(
@@ -83,7 +84,7 @@ class RentReceiptRoutes:
         tenant_id: uuid.UUID,
         receipt_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).get_tenant_receipt(
@@ -104,7 +105,7 @@ class RentReceiptRoutes:
         page: int = 1,
         per_page: int = 20,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).get_tenant_receipts_for_property(
@@ -126,7 +127,7 @@ class RentReceiptRoutes:
         page: int = 1,
         per_page: int = 20,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentReceiptService(db).get_property_receipts(

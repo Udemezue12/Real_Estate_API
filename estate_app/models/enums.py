@@ -201,6 +201,7 @@ class PaymentStatus(str, Enum):
     VERIFIED = "Verified"
     FAILED = "Failed"
     REFUNDED = "Refunded"
+    VERIFICATION_PENDING="VERIFICATION PENDING"
 
 
 class PayoutStatus(str, Enum):

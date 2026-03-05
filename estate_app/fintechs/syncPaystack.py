@@ -71,6 +71,7 @@ class PaystackClient:
             "paid_at": tx.get("paid_at"),
             "channel": tx.get("channel"),
             "customer": tx.get("customer"),
+            
         }
 
     def resolve_account(self, account_number: str, bank_code: str):

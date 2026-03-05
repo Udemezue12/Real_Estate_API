@@ -19,7 +19,10 @@ from schemas.schema import PropertyOut
 
 
 class PropertyService:
-    LOCK_KEY = "property-service-lock-v2"
+    CREATE_LOCK_KEY = "property-create-service-lock-v2"
+    UPDATE_LOCK_KEY = "property-update_service-lock-v2"
+    DELETE_LOCK_KEY = "property-update_service-lock-v2"
+    
 
     def __init__(self, db):
         self.repo: PropertyRepo = PropertyRepo(db)
@@ -107,7 +110,11 @@ class PropertyService:
 
             return self.mapper.one(prop, PropertyOut)
 
-        return await breaker.call(handler)
+        return await self.idempotency.run_once(
+            key=f"{self.CREATE_LOCK_KEY}:{current_user.id}:{data.title}:",
+            coro=handler,
+            ttl=120,
+        )
 
     async def update_property(self, property_id: uuid.UUID, current_user, data):
         async def handler():
@@ -149,7 +156,11 @@ class PropertyService:
 
             return self.mapper.one(prop, PropertyOut)
 
-        return await breaker.call(handler)
+        return  await self.idempotency.run_once(
+            key=f"{self.UPDATE_LOCK_KEY}::{property_id}:{current_user.id}",
+            coro=handler,
+            ttl=120,
+        )
 
     async def delete_property(self, current_user, property_id: uuid.UUID):
         async def handler():
@@ -181,7 +192,11 @@ class PropertyService:
                 }
             )
 
-        return await breaker.call(handler)
+        return  await self.idempotency.run_once(
+            key=f"{self.DELETE_LOCK_KEY}:{current_user.id}:{property_id}",
+            coro=handler,
+            ttl=120,
+        )
 
     async def get_single_property_by_user(
         self, property_id: uuid.UUID, current_user
@@ -361,7 +376,7 @@ class PropertyService:
             )
             return {"message": "Verified Successfully"}
 
-        return await self.idempotency.run_once(key=self.LOCK_KEY, coro=_start, ttl=120)
+        return await self.idempotency.run_once(key=f"{self.CREATE_LOCK_KEY}::verify:{property_id}", coro=_start, ttl=120)
 
     async def cache_delete(
         self,

@@ -26,7 +26,7 @@ class SaleListingService:
         self.repo: SaleListingRepo = SaleListingRepo(db)
         self.lga_repo: LGARepo = LGARepo(db)
         self.permission: CheckRolePermission = CheckRolePermission()
-        self.idempotency: RedisIdempotency = RedisIdempotency(
+        self.redis_idempotency: RedisIdempotency = RedisIdempotency(
             namespace="property-sales-service"
         )
         self.image_repo: SaleListingImageRepo = SaleListingImageRepo(db=db)
@@ -167,15 +167,15 @@ class SaleListingService:
 
             return listing_out
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.LOCK_KEY}:create:{current_user.id}:{data.title}", coro=handler, ttl=120)
 
     async def update_listing(self, listing_id: uuid.UUID, data, current_user):
         async def handler():
             user_id = current_user.id
             await self.permission.check_authenticated(current_user=current_user)
-            # await self.check_lists_exists(
-            #     listing_id=listing_id, current_user=current_user
-            # )
+            await self.check_lists_exists(
+                listing_id=listing_id, current_user=current_user
+            )
             updated_data = data.model_dump(exclude_unset=True)
             if not updated_data:
                 raise HTTPException(
@@ -225,7 +225,7 @@ class SaleListingService:
 
             return self.mapper.one(prop, SalesListingOut)
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.LOCK_KEY}:update:{current_user.id}:{listing_id}:{data.title}", coro=handler, ttl=120)
 
     async def delete_listing(
         self,
@@ -260,7 +260,7 @@ class SaleListingService:
 
             return {"deleted": True, "id": str(listing.id)}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.LOCK_KEY}:delete:{current_user.id}:{listing_id}", coro=handler, ttl=120)
 
     async def delete_all_listings(self):
         async def handler():
@@ -375,7 +375,7 @@ class SaleListingService:
 
             return {"message": "Successfully Sold"}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.LOCK_KEY}:mark:{current_user.id}:{listing_id}", coro=handler, ttl=120)
 
     async def unmark_as_sold(self, listing_id: uuid.UUID, current_user):
         async def handler():
@@ -407,7 +407,7 @@ class SaleListingService:
 
             return {"message": "Successfully Done"}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.LOCK_KEY}:unmark:{current_user.id}:{listing_id}", coro=handler, ttl=120)
 
     async def mark_as_verified(self, property_id: uuid.UUID, current_user):
         async def _start():
@@ -429,4 +429,4 @@ class SaleListingService:
             )
             return {"message": "Verified Successfully"}
 
-        return await self.idempotency.run_once(key=self.LOCK_KEY, coro=_start, ttl=120)
+        return await self.redis_idempotency.run_once(key=f"{self.LOCK_KEY}:verify:{current_user.id}:{property_id}", coro=_start, ttl=120)

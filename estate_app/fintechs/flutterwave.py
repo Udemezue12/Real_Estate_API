@@ -10,22 +10,22 @@ class FlutterwaveClient:
 
     def __init__(self):
         self.secret = settings.FLUTTERWAVE_SECRET_KEY
-        self.redirect_url = settings.REDIRECT_URL
+        
 
         self.headers = {
             "Authorization": f"Bearer {self.secret}",
             "Content-Type": "application/json",
         }
 
-    async def initialize_payment(self, email: str, amount: Decimal):
+    async def initialize_payment(self, email: str, amount: Decimal, reference:str, redirect_url:str):
         url = f"{self.BASE_URL}/payments"
-        tx_ref = f"FLW-{uuid.uuid4().hex[:12]}"
+        
 
         payload = {
-            "tx_ref": tx_ref,
+            "tx_ref": reference,
             "amount": amount,
             "currency": "NGN",
-            "redirect_url": self.redirect_url,
+            "redirect_url": redirect_url,
             "customer": {"email": email},
             "payment_options": "card",
             "customizations": {
@@ -45,7 +45,7 @@ class FlutterwaveClient:
 
         return {
             "checkout_link": data["data"]["link"],
-            "tx_ref": tx_ref,
+            "tx_ref": reference,
         }
 
     async def verify_payment(self, tx_ref: str) -> dict:

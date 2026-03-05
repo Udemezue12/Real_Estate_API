@@ -28,7 +28,7 @@ class FlutterwaveClient:
             "customer": {"email": email},
             "payment_options": "card",
             "customizations": {
-                "title": "Online Payment",
+                "title": "Rent Online Payment",
                 "description": "Online Payment for AutoPopulate Api",
             },
         }
@@ -44,7 +44,7 @@ class FlutterwaveClient:
 
         return {
             "checkout_link": data["data"]["link"],
-            "tx_ref": tx_ref,
+            "tx_ref": reference,
         }
 
     def verify_payment(self, tx_ref: str):

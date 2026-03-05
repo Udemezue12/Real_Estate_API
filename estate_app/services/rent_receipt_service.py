@@ -98,88 +98,88 @@ class RentReceiptService:
             raise
 
     def create_from_payment(self, payment):
-        
-            tenant = self.tenant_repo.sync_get_by_id(payment.tenant_id)
-            existing_receipt = self.repo.sync_get_unpaid_receipt_for_tenant(
-                payment.tenant_id
+
+        tenant = self.tenant_repo.sync_get_by_id(payment.tenant_id)
+        existing_receipt = self.repo.sync_get_unpaid_receipt_for_tenant(
+            payment.tenant_id
+        )
+        get_payment_context = self.determine_payment_context(
+            amount_received=Decimal(str(payment.amount_received)),
+            receipt=existing_receipt,
+            tenant=tenant,
+        )
+
+        if not tenant:
+            raise HTTPException(404, "Tenant not found")
+
+        existing = self.payment_repo.sync_get_payment_id(payment.id)
+        if existing:
+            return existing
+        months = RENT_CYCLE_TO_MONTHS.get(tenant.rent_cycle)
+        if not months:
+            raise RuntimeError("Unsupported rent cycle")
+        if tenant.rent_expiry_date:
+            period_start = tenant.rent_expiry_date
+        else:
+            period_start = tenant.rent_start_date
+        if existing_receipt:
+            existing_receipt.amount_paid += payment.amount_received
+            existing_receipt.fully_paid = (
+                existing_receipt.amount_paid >= existing_receipt.expected_amount
             )
-            get_payment_context = self.determine_payment_context(
-                amount_received=Decimal(str(payment.amount_received)),
-                receipt=existing_receipt,
-                tenant=tenant,
-            )
-
-            if not tenant:
-                raise HTTPException(404, "Tenant not found")
-
-            existing = self.payment_repo.sync_get_payment_id(payment.id)
-            if existing:
-                return existing
-            months = RENT_CYCLE_TO_MONTHS.get(tenant.rent_cycle)
-            if not months:
-                raise RuntimeError("Unsupported rent cycle")
-            if tenant.rent_expiry_date:
-                period_start = tenant.rent_expiry_date
-            else:
-                period_start = tenant.rent_start_date
-            if existing_receipt:
-                existing_receipt.amount_paid += payment.amount_received
-                existing_receipt.fully_paid = (
-                    existing_receipt.amount_paid >= existing_receipt.expected_amount
-                )
-                existing_receipt.remaining_balance = {
-                    existing_receipt.amount_paid - existing_receipt.expected_amount
-                }
-                existing_receipt.payment_context = get_payment_context
-                existing_receipt.payment_id = payment.id
-
-                self.repo.sync_db_commit_and_refresh(existing_receipt)
-
-                receipt = existing_receipt
-                receipt_created = existing_receipt
-            else:
-                receipt = RentReceipt(
-                    tenant_id=tenant.id,
-                    property_id=payment.property_id,
-                    landlord_id=payment.landlord_id,
-                    expected_amount=tenant.rent_amount,
-                    amount_paid=Decimal(str(payment.amount_received)),
-                    month_paid_for=period_start.month,
-                    year_paid_for=period_start.year,
-                    rent_duration_months=months,
-                    payment_id=payment.id,
-                    public_id=user_generate.generate_secure_public_id(
-                        prefix="receipt"
-                    ),
-                    reference_number=f"HMT-{uuid.uuid4().hex[:40]}",
-                    fully_paid=True,
-                    payment_context="FULL_RENT",
-                    balance=0,
-                )
-                if not receipt.id:
-                    raise HTTPException(404, "Not found")
-
-                receipt_created = self.repo.create(receipt=receipt)
-                self.repo.sync_db_commit_and_refresh(receipt_created)
-
-            tenant_email = payment.tenant_email
-            landlord_name = f"{payment.landlord_firstname} {payment.landlord_middlename} {payment.landlord_lastname}"
-            tenant_name = f"{payment.tenant_firstname} {payment.tenant_middlename} {payment.tenant_lastname}"
-            self.fire_and_forget.mark_paid(
-                receipt=receipt_created,
-                tenant=tenant,
-                email=tenant_email,
-                landlord_name=landlord_name,
-                tenant_name=tenant_name,
-            )
-
-            return {
-                "receipt_id": str(receipt.id),
-                "fully_paid": receipt.fully_paid,
-                "amount_paid": str(receipt.amount_paid),
-                "reference_number": receipt.reference_number,
-                "balance": str(receipt.expected_amount - receipt.amount_paid),
+            existing_receipt.remaining_balance = {
+                existing_receipt.amount_paid - existing_receipt.expected_amount
             }
+            existing_receipt.payment_context = get_payment_context
+            existing_receipt.payment_id = payment.id
+
+            self.repo.sync_db_commit_and_refresh(existing_receipt)
+
+            receipt = existing_receipt
+            receipt_created = existing_receipt
+        else:
+            receipt = RentReceipt(
+                tenant_id=tenant.id,
+                property_id=payment.property_id,
+                landlord_id=payment.landlord_id,
+                expected_amount=tenant.rent_amount,
+                amount_paid=Decimal(str(payment.amount_received)),
+                month_paid_for=period_start.month,
+                year_paid_for=period_start.year,
+                rent_duration_months=months,
+                payment_id=payment.id,
+                public_id=user_generate.generate_secure_public_id(
+                    prefix="receipt"
+                ),
+                reference_number=f"HMT-{uuid.uuid4().hex[:40]}",
+                fully_paid=True,
+                payment_context="FULL_RENT",
+                balance=0,
+            )
+            if not receipt.id:
+                raise HTTPException(404, "Not found")
+
+            receipt_created = self.repo.create(receipt=receipt)
+            self.repo.sync_db_commit_and_refresh(receipt_created)
+
+        tenant_email = payment.tenant_email
+        landlord_name = f"{payment.landlord_firstname} {payment.landlord_middlename} {payment.landlord_lastname}"
+        tenant_name = f"{payment.tenant_firstname} {payment.tenant_middlename} {payment.tenant_lastname}"
+        self.fire_and_forget.mark_paid(
+            receipt=receipt_created,
+            tenant=tenant,
+            email=tenant_email,
+            landlord_name=landlord_name,
+            tenant_name=tenant_name,
+        )
+
+        return {
+            "receipt_id": str(receipt.id),
+            "fully_paid": receipt.fully_paid,
+            "amount_paid": str(receipt.amount_paid),
+            "reference_number": receipt.reference_number,
+            "balance": str(receipt.expected_amount - receipt.amount_paid),
+        }
 
     async def mark_as_paid(self, current_user, proof_id: uuid.UUID):
         async def _start():
@@ -189,12 +189,14 @@ class RentReceiptService:
             proof = await self.proof_repo.get_pending_proof(proof_id)
 
             if not proof:
-                raise ValueError("Payment proof not found or already processed")
+                raise ValueError(
+                    "Payment proof not found or already processed")
             tenant = proof.tenant
             tenant_id = proof.tenant_id
 
             if not await ModelPolicy.can_mark_payment(tenant, user_id):
-                raise PermissionError("You are not allowed to mark this payment")
+                raise PermissionError(
+                    "You are not allowed to mark this payment")
 
             if proof.rent_receipt_id:
                 return {"message": "Already paid", "receipt_id": proof.rent_receipt_id}
@@ -255,7 +257,7 @@ class RentReceiptService:
             }
 
         return await self.idempotency.run_once(
-            key=self.LOCK_KEY,
+            key=f"{self.LOCK_KEY}:{current_user.id}:{proof_id}",
             coro=_start,
             ttl=120,
         )
@@ -267,12 +269,14 @@ class RentReceiptService:
 
             proof = await self.proof_repo.get_pending_proof(proof_id)
             if not proof:
-                raise HTTPException(404, "Payment proof not found or already processed")
+                raise HTTPException(
+                    404, "Payment proof not found or already processed")
 
             tenant = proof.tenant
 
             if not await ModelPolicy.can_mark_payment(tenant, user_id):
-                raise HTTPException(403, "You are not allowed to reject this payment")
+                raise HTTPException(
+                    403, "You are not allowed to reject this payment")
 
             proof.status = RENT_PAYMENT_STATUS.REJECTED
             proof.rejection_reason = data.reason
@@ -281,11 +285,7 @@ class RentReceiptService:
 
             await self.repo.db_commit_and_refresh(proof)
 
-            # Notify tenant
-            # await self.fire_and_forget.payment_proof_rejected(
-            #     tenant=tenant,
-            #     reason=reason,
-            # )
+            
 
             return {
                 "message": "Payment proof rejected",
@@ -294,7 +294,7 @@ class RentReceiptService:
             }
 
         return await self.idempotency.run_once(
-            key=f"reject-proof-{proof_id}",
+            key=f"reject-proof-{current_user.id}-{proof_id}",
             coro=_start,
             ttl=120,
         )
@@ -325,7 +325,11 @@ class RentReceiptService:
                 "message": "Use the download_url to download the receipt PDF",
             }
 
-        return await breaker.call(handler)
+        return await self.idempotency.run_once(
+            key=f"download-proof-{current_user.id}-{receipt_id}",
+            coro=handler,
+            ttl=120,
+        )
 
     async def verify_receipt(self, reference: str, current_user) -> RentReceipt | None:
         async def handler():
@@ -352,7 +356,11 @@ class RentReceiptService:
                 "property_id": str(result.property_id),
             }
 
-        return await breaker.call(handler)
+        return await self.idempotency.run_once(
+            key=f"verify_receipt:{current_user.id}::{reference}",
+            coro=handler,
+            ttl=120,
+        )
 
     async def get_tenant_receipt(
         self,
@@ -364,8 +372,7 @@ class RentReceiptService:
             user_id = current_user.id
             await self.permission.check_authenticated(current_user=current_user)
 
-            # if not tenant:
-            #     raise HTTPException(403,"Not permitted")
+            
             cache_key = f"tenant:{tenant_id}:receipt:{receipt_id}:property"
             cached = await cache.get_json(cache_key)
             if cached:
@@ -409,7 +416,8 @@ class RentReceiptService:
                 property_id=property_id,
             )
             receipts_list = self.mapper.many(receipts, RentReceiptBaseOut)
-            paginated_receipts = self.paginate.paginate(receipts_list, page, per_page)
+            paginated_receipts = self.paginate.paginate(
+                receipts_list, page, per_page)
             await cache.set_json(
                 cache_key,
                 self.paginate.get_list_json_dumps(paginated_receipts),
@@ -439,7 +447,8 @@ class RentReceiptService:
 
             receipts = await self.repo.get_property_receipts(property_id)
             receipts_list = self.mapper.many(receipts, RentReceiptBaseOut)
-            paginated_receipts = self.paginate.paginate(receipts_list, page, per_page)
+            paginated_receipts = self.paginate.paginate(
+                receipts_list, page, per_page)
 
             await cache.set_json(
                 cache_key,
@@ -492,7 +501,7 @@ class RentReceiptService:
         return await breaker.call(handler)
 
     async def delete(
-        self, current_user, receipt_id: uuid.UUID, resource_type: str = "raw"
+        self, current_user, receipt_id: uuid.UUID, 
     ):
         async def handler():
             receipt = await self.repo.get_receipt_id(receipt_id=receipt_id)
@@ -500,7 +509,7 @@ class RentReceiptService:
             if not receipt:
                 raise HTTPException(404, "Not Found")
             await self.cloudinary.delete_image(
-                public_id=receipt.public_id, resource_type=resource_type
+                public_id=receipt.public_id, resource_type="raw"
             )
             await self.repo.normal_delete(
                 user_id=current_user.id, receipt_id=receipt_id
@@ -515,7 +524,11 @@ class RentReceiptService:
 
             return {"id": str(receipt_id), "message": "Deleted"}
 
-        return await breaker.call(handler)
+        return await self.idempotency.run_once(
+            key=f"delete-proof-{current_user.id}-{receipt_id}",
+            coro=handler,
+            ttl=120,
+        )
 
 
 # @router.get("/rent-receipts/{receipt_id}/barcode")

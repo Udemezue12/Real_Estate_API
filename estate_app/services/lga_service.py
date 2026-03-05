@@ -103,7 +103,7 @@ class LGAService:
     async def create_lga(
         self,
     ):
-        # async def _sync():
+        
         print("Starting LGA sync...")
 
         for state_name, payload in locations.items():
@@ -143,11 +143,7 @@ class LGAService:
 
         print("LGA sync completed")
 
-    # await self.redis_idempotency.run_once(
-    #     key=self.LOCK_KEY,
-    #     coro=_sync,
-    #     ttl=300,
-    # )
+   
 
     async def update_lga(
         self, current_user, lga_id: uuid.UUID, new_name: Optional[str] = None

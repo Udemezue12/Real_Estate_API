@@ -109,7 +109,7 @@ class StateService:
     async def create_state(
         self,
     ):
-        # async def _sync():
+       
             print("Starting state sync...")
 
             for item in STATES:
@@ -137,11 +137,7 @@ class StateService:
 
             print("State sync completed")
 
-        # await self.idempotency.run_once(
-        #     key=self.LOCK_KEY,
-        #     coro=_sync,
-        #     ttl=120,
-        # )
+        
 
     async def update_state(
         self, current_user, state_id: uuid.UUID, new_name: str | None = None

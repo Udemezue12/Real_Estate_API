@@ -13,12 +13,13 @@ import tasks.get_bank_name_tasks
 import tasks.expire_pending_sales_viewings
 import tasks.expire_pending_rental_viewings
 import tasks.account_name_match_tasks
+import tasks.payment_retry_verifications_tasks
 from celery import Celery
 from celery.schedules import crontab
 
 from core.settings import settings
 
-REDIS_URL = settings.CELERY_REDIS_URL
+REDIS_URL = settings.CELERY_REDIS_URLL
 
 celery_app = Celery(
     "real_estate_tasks",

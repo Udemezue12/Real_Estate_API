@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 class TenantService:
     CREATE_LOCK_KEY = "create-tenant-v2"
+    UPDATE_LOCK_KEY = "update-tenant-v2"
     DELETE_LOCK_KEY = "create-tenant-v2"
 
     def __init__(self, db):
@@ -43,7 +44,6 @@ class TenantService:
             namespace="tenant-management"
         )
         self.permission: CheckRolePermission = CheckRolePermission()
-
 
     async def assert_property_owner_or_manager(self, current_user, prop):
         if not (
@@ -109,7 +109,8 @@ class TenantService:
                 matched_phone_number = user.phone_number
 
             else:
-                logger.warning("No user matched for name: %r", matched_user_name)
+                logger.warning("No user matched for name: %r",
+                               matched_user_name)
             tenant_data = {
                 "property_id": payload.property_id,
                 "first_name": payload.first_name,
@@ -147,9 +148,7 @@ class TenantService:
 
             return TenantWithPropertyOut.model_validate(created_tenant)
 
-        return await self.idempotency.run_once(
-            key=self.CREATE_LOCK_KEY, coro=_handler, ttl=120
-        )
+        return await self.idempotency.run_once(key=f"{self.CREATE_LOCK_KEY}:{current_user.id}:{payload.property_id}:{payload.first_name}", coro=_handler, ttl=120)
 
     async def update_tenant(
         self, tenant_id: UUID, payload, current_user
@@ -226,7 +225,7 @@ class TenantService:
 
             return TenantWithPropertyOut.model_validate(tenant)
 
-        return await breaker.call(handler)
+        return await self.idempotency.run_once(key=f"{self.UPDATE_LOCK_KEY}:{current_user.id}:{TENANT_ID}:{payload.first_name}", coro=handler, ttl=120)
 
     async def delete_tenant(
         self,
@@ -250,7 +249,8 @@ class TenantService:
 
             rows = await self.repo.delete(tenant_id)
             if rows == 0:
-                raise HTTPException(status_code=500, detail="Failed to delete tenant")
+                raise HTTPException(
+                    status_code=500, detail="Failed to delete tenant")
 
             await cache.delete_cache_keys_async(
                 f"tenants:property:{tenant.property_id}",
@@ -272,7 +272,7 @@ class TenantService:
             return response
 
         return await self.idempotency.run_once(
-            key=self.DELETE_LOCK_KEY,
+            key=f"{self.DELETE_LOCK_KEY}:{current_user.id}:{tenant_id}",
             coro=_start,
             ttl=120,
         )
@@ -288,10 +288,9 @@ class TenantService:
             if not tenant:
                 raise HTTPException(status_code=404, detail="Tenant not found")
 
-            
             await self.assert_property_owner_or_manager(
-                    current_user, tenant.property
-                )
+                current_user, tenant.property
+            )
 
             tenant_out = TenantWithPropertyOut.model_validate(tenant)
 
@@ -311,7 +310,7 @@ class TenantService:
         prop = await self.property_repo.get_property_with_id(property_id)
         if not prop:
             raise HTTPException(404, "Property not found")
-        
+
         await self.assert_property_owner_or_manager(current_user, prop)
 
         cache_key = f"tenants:property:{property_id}:page:{page}:per:{per_page}"

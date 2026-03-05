@@ -10,13 +10,14 @@ from fintechs.paystack import PaystackClient
 from fintechs.syncFlutterwave import FlutterwaveClient as SyncFlutterwaveClient
 from fintechs.syncPaystack import PaystackClient as SyncPaystackClient
 from repos.bank_repo import BankRepo
+from security.security_generate import user_generate
 from schemas.schema import BankOut
 
 logger = logging.getLogger(__name__)
 
 
 class BankService:
-    LOCK_KEY: str = "bank-sync-v2"
+    LOCK_KEY: str = f"bank-sync-v2:{user_generate.sync_generate_reference()}"
 
     def __init__(self, db):
         self.db = db

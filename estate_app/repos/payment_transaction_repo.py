@@ -20,6 +20,13 @@ class PaymentTransactionRepo:
             )
         )
         return result.scalar_one_or_none()
+    def sync_get_reference(self, reference: str) -> PaymentTransaction | None:
+        result = self.db.execute(
+            select(PaymentTransaction).where(
+                PaymentTransaction.provider_reference == reference
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def create(
         self,
@@ -103,6 +110,18 @@ class PaymentTransactionRepo:
         except SQLAlchemyError:
             await self.db.rollback()
             raise
+    def sync_update_status(self, payment_id: uuid.UUID, status: PaymentStatus):
+        stmt = (
+            update(PaymentTransaction)
+            .where(PaymentTransaction.id == payment_id)
+            .values(status=status)
+        )
+        try:
+            self.db.execute(stmt)
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
     async def get_payment_id(self, payment_id: uuid.UUID) -> PaymentTransaction:
         result = await self.db.execute(
@@ -154,6 +173,42 @@ class PaymentTransactionRepo:
             await self.db.commit()
         except SQLAlchemyError:
             await self.db.rollback()
+            raise
+    def sync_set_reference(self, payment_id: uuid.UUID, reference: str):
+        stmt = (
+            update(PaymentTransaction)
+            .where(PaymentTransaction.id == payment_id)
+            .values(provider_reference=reference)
+        )
+        try:
+            self.db.execute(stmt)
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+    async def set_transaction_id(self, payment_id: uuid.UUID, transaction_id: str):
+        stmt = (
+            update(PaymentTransaction)
+            .where(PaymentTransaction.id == payment_id)
+            .values(transaction_id=transaction_id)
+        )
+        try:
+            await self.db.execute(stmt)
+            await self.db.commit()
+        except SQLAlchemyError:
+            await self.db.rollback()
+            raise
+    def sync_set_transaction_id(self, payment_id: uuid.UUID, transaction_id: str):
+        stmt = (
+            update(PaymentTransaction)
+            .where(PaymentTransaction.id == payment_id)
+            .values(transaction_id=transaction_id)
+        )
+        try:
+            self.db.execute(stmt)
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
             raise
 
     async def _commit_and_refresh(self, value):

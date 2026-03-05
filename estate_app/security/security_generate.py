@@ -21,6 +21,8 @@ redis = Redis.from_url(settings.CELERY_REDIS_URL, decode_responses=True)
 class UserGenerate:
     async def generate_reference(self):
         return str(uuid.uuid4().int)[:12]
+    def sync_generate_reference(self):
+        return str(uuid.uuid4().int)[:12]
 
     async def generate_unique_idem_key(
         self,

@@ -1,8 +1,8 @@
-"""inital tables
+"""create initial tables
 
-Revision ID: d37812b8cff0
+Revision ID: 61efe9956478
 Revises: 
-Create Date: 2026-03-04 15:33:03.728463
+Create Date: 2026-03-05 19:08:42.451429
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from geoalchemy2 import Geography
 
 # revision identifiers, used by Alembic.
-revision: str = 'd37812b8cff0'
+revision: str = '61efe9956478'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -516,9 +516,10 @@ def upgrade() -> None:
     sa.Column('property_id', sa.UUID(), nullable=False),
     sa.Column('payment_provider', sa.Enum('PAYSTACK', 'FLUTTERWAVE', 'NONE_YET', name='paymentprovider', native_enum=False), nullable=False),
     sa.Column('provider_reference', sa.String(length=255), nullable=True),
+    sa.Column('transaction_id', sa.String(length=255), nullable=True),
     sa.Column('amount_received', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('currency', sa.String(length=10), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'VERIFIED', 'FAILED', 'REFUNDED', name='paymentstatus', native_enum=False), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'VERIFIED', 'FAILED', 'REFUNDED', 'VERIFICATION_PENDING', name='paymentstatus', native_enum=False), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['invoice_id'], ['rent_invoices.id'], ),
     sa.ForeignKeyConstraint(['landlord_id'], ['users.id'], ),
@@ -530,6 +531,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_payment_transactions_property_id'), 'payment_transactions', ['property_id'], unique=False)
     op.create_index(op.f('ix_payment_transactions_provider_reference'), 'payment_transactions', ['provider_reference'], unique=True)
     op.create_index(op.f('ix_payment_transactions_tenant_id'), 'payment_transactions', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_payment_transactions_transaction_id'), 'payment_transactions', ['transaction_id'], unique=True)
     op.create_table('rent_ledgers',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('tenant_id', sa.UUID(), nullable=False),
@@ -694,6 +696,7 @@ def downgrade() -> None:
     op.drop_table('rental_encrypted_messages')
     op.drop_index(op.f('ix_rent_ledgers_tenant_id'), table_name='rent_ledgers')
     op.drop_table('rent_ledgers')
+    op.drop_index(op.f('ix_payment_transactions_transaction_id'), table_name='payment_transactions')
     op.drop_index(op.f('ix_payment_transactions_tenant_id'), table_name='payment_transactions')
     op.drop_index(op.f('ix_payment_transactions_provider_reference'), table_name='payment_transactions')
     op.drop_index(op.f('ix_payment_transactions_property_id'), table_name='payment_transactions')

@@ -67,7 +67,8 @@ class PaystackClient:
 
         return {
             "success": True,
-            "status": tx["status"],          
+            "status": tx["status"], 
+            "transaction_id": tx["id"] ,        
             "reference": tx["reference"],
             "amount": tx["amount"] / 100,
             "currency": tx["currency"],

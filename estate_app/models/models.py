@@ -1604,6 +1604,9 @@ class PaymentTransaction(Base):
     provider_reference: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=True
     )
+    transaction_id: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
 
     amount_received: Mapped[Optional[Numeric]] = mapped_column(
         Numeric(12, 2), nullable=False

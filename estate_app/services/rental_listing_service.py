@@ -19,7 +19,7 @@ from schemas.schema import RentalListingOut
 
 
 class RentalListingService:
-    LOCK_KEY = "property-rentals-service-lock-v2"
+    CREATE_LOCK_KEY = "property-rentals-service-lock-v2"
 
     def __init__(self, db):
         self.repo: RentalListingRepo = RentalListingRepo(db)
@@ -28,7 +28,7 @@ class RentalListingService:
         self.paginate: PaginatePage = PaginatePage()
         self.mapper: ORMMapper = ORMMapper()
         self.permission: CheckRolePermission = CheckRolePermission()
-        self.idempotency: RedisIdempotency = RedisIdempotency(
+        self.redis_idempotency: RedisIdempotency = RedisIdempotency(
             namespace="property-rentals-service"
         )
 
@@ -59,7 +59,8 @@ class RentalListingService:
             if cached:
                 return self.mapper.many(items=cached, schema=RentalListingOut)
             listings = await self.repo.get_all()
-            listings_out = self.mapper.many(items=listings, schema=RentalListingOut)
+            listings_out = self.mapper.many(
+                items=listings, schema=RentalListingOut)
             paginated = self.paginate.paginate(listings_out, page, per_page)
 
             await cache.set_json(
@@ -81,7 +82,8 @@ class RentalListingService:
 
             listing = await self.repo.get_listing_id(listing_id)
             if not listing:
-                raise HTTPException(status_code=404, detail="Listing not found")
+                raise HTTPException(
+                    status_code=404, detail="Listing not found")
 
             listing_out = self.mapper.one(listing, RentalListingOut)
 
@@ -139,7 +141,11 @@ class RentalListingService:
 
             return listing_out
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=f"{self.CREATE_LOCK_KEY}:create:{current_user.id}",
+            coro=handler,
+            ttl=300,
+        )
 
     async def update_listing(self, listing_id: uuid.UUID, data, current_user):
         async def handler():
@@ -162,7 +168,6 @@ class RentalListingService:
                     state_id=state_id,
                     lga_id=lga_id,
                 )
-
 
             updated = await self.repo.update(
                 user_id=user_id,
@@ -196,7 +201,11 @@ class RentalListingService:
 
             return self.mapper.one(prop, RentalListingOut)
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=f"{self.CREATE_LOCK_KEY}:update:{current_user.id}:{data.title}",
+            coro=handler,
+            ttl=300,
+        )
 
     async def delete_listing(self, listing_id: uuid.UUID, current_user):
         async def handler():
@@ -226,7 +235,11 @@ class RentalListingService:
 
             return {"deleted": True, "id": str(listing.id)}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(
+            key=f"{self.CREATE_LOCK_KEY}:delete:{current_user.id}:{listing_id}",
+            coro=handler,
+            ttl=300,
+        )
 
     async def delete_all_listings(self, current_user):
         async def handler():
@@ -326,7 +339,8 @@ class RentalListingService:
                 listing_id=listing_id, user_id=current_user.id
             )
             if not sold:
-                raise HTTPException(404, "Listing not found or already available")
+                raise HTTPException(
+                    404, "Listing not found or already available")
             await cache.delete_cache_keys_async(
                 "rental_listings:all",
                 f"rental_listings:state:{listing.state_id}",
@@ -345,7 +359,7 @@ class RentalListingService:
 
             return {"message": "Property Now Available for Rent"}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.CREATE_LOCK_KEY}:mark-as-available:{current_user.id}:{listing_id}", coro=handler, ttl=120)
 
     async def mark_as_unavailable(
         self,
@@ -361,7 +375,8 @@ class RentalListingService:
                 listing_id=listing_id, user_id=current_user.id
             )
             if not sold:
-                raise HTTPException(404, "Listing not found or already unavailable")
+                raise HTTPException(
+                    404, "Listing not found or already unavailable")
             await cache.delete_cache_keys_async(
                 "rental_listings:all",
                 f"rental_listings:state:{listing.state_id}",
@@ -380,7 +395,7 @@ class RentalListingService:
 
             return {"message": "Property Unavailable for Rent"}
 
-        return await breaker.call(handler)
+        return await self.redis_idempotency.run_once(key=f"{self.CREATE_LOCK_KEY}:mark-as-unavailable:{current_user.id}:{listing_id}", coro=handler, ttl=120)
 
     async def mark_as_verified(self, property_id: uuid.UUID, current_user):
         async def _start():
@@ -389,7 +404,8 @@ class RentalListingService:
             if not property:
                 raise HTTPException(404, "Not Found")
             if property.is_verified:
-                raise HTTPException(403, "This property has already been verified")
+                raise HTTPException(
+                    403, "This property has already been verified")
             await self.repo.mark_property_verified(
                 property_id=property_id,
                 is_verified=True,
@@ -403,4 +419,4 @@ class RentalListingService:
             )
             return {"message": "Verified Successfully"}
 
-        return await self.idempotency.run_once(key=self.LOCK_KEY, coro=_start, ttl=120)
+        return await self.redis_idempotency.run_once(key=f"{self.CREATE_LOCK_KEY}:verify:{current_user.id}:{property_id}", coro=_start, ttl=300)
