@@ -12,6 +12,8 @@ username = os.getenv("CELERY_REDIS_USERNAME")
 password = os.getenv("CELERY_REDIS_PASSWORD")
 host = os.getenv("CELERY_REDIS_HOST", "").rstrip("/")
 port = os.getenv("CELERY_REDIS_PORT")
+
+
 class Settings(BaseSettings):
     FLUTTERWAVE_BASE_URL: str = "https://api.flutterwave.com/v3"
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
@@ -24,12 +26,9 @@ class Settings(BaseSettings):
         f"redis://{os.getenv('RATE_LIMIT_REDIS_USERNAME')}:{os.getenv('RATE_LIMIT_REDIS_PASSWORD')}"
         f"@{os.getenv('RATE_LIMIT_REDIS_HOST')}:{os.getenv('RATE_LIMIT_REDIS_PORT')}/0"
     )
-    CELERY_REDIS_URL: str =  f"redis://{username}:{password}@{host}:{port}/0"
-    
-    CELERY_REDIS_URLL: str | None = (
-        f"redis://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
-        f"@{os.getenv('CELERY_REDIS_HOST')}:{os.getenv('CELERY_REDIS_PORT')}"
-    )
+    CELERY_REDIS_URL: str = f"redis://{username}:{password}@{host}:{port}/0"
+
+    PRODUCTION_CELERY_REDIS_URL: str | None = os.getenv("PRODUCTION_CELERY_REDIS_URL")
     RABBITMQ_MAIN_EXCHANGE: str = "location_events"
     RABBITMQ_URL: str = os.getenv("RABBITMQ_URL", "")
     RABBITMQ_DLX: str = "dead_letter_exchange"
@@ -59,7 +58,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
     RP_ID: str | None = os.getenv("DEV_RP_ID")
-    WEBAUTHN_ORIGIN: str  = "http://localhost:8000"
+    WEBAUTHN_ORIGIN: str = "http://localhost:8000"
     ORIGIN: str | None = os.getenv("DEV_ORIGIN")
     SECURE: str | None = os.getenv("secure")
     TERMII_API_KEY: str | None = os.getenv("TERMII_API_KEY")
@@ -73,7 +72,8 @@ class Settings(BaseSettings):
     CSRF_TOKEN_EXPIRE_DAYS: int = 5
     SECURE_COOKIES: bool = False  # must be false on localhost
     SECRET_KEY: str | None = os.getenv("SECRET_KEY")
-    jwt_expiration: ClassVar[datetime] = datetime.now(timezone.utc) + timedelta(hours=1)
+    jwt_expiration: ClassVar[datetime] = datetime.now(
+        timezone.utc) + timedelta(hours=1)
     access_key_jwt_expiration: ClassVar[datetime] = datetime.now(
         timezone.utc
     ) + timedelta(minutes=10)

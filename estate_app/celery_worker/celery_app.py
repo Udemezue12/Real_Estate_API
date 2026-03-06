@@ -16,16 +16,19 @@ import tasks.account_name_match_tasks
 import tasks.payment_retry_verifications_tasks
 from celery import Celery
 from celery.schedules import crontab
-
+import ssl
 from core.settings import settings
 
-REDIS_URL = settings.CELERY_REDIS_URL
+REDIS_URL = settings.PRODUCTION_CELERY_REDIS_URL
 
 celery_app = Celery(
     "real_estate_tasks",
     broker=REDIS_URL,
     backend=REDIS_URL,
+    
 )
+
+
 
 celery_app.conf.update(
     task_serializer="json",
