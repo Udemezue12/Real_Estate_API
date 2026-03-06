@@ -472,6 +472,64 @@ class PropertyRepo:
             .limit(per_page)
         )
         return result.scalars().all()
+    async def get_properties_by_lga(
+        self,
+        lga_id: uuid.UUID,
+        
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
+    ) -> List[Property]:
+        result = await self.db.execute(
+            select(Property)
+            .where(Property.is_verified == is_verified)
+            .options(
+                selectinload(Property.images),
+                selectinload(Property.tenants),
+                selectinload(Property.state),
+                selectinload(Property.lga),
+                selectinload(Property.rent_receipts),
+                selectinload(Property.owner),
+                selectinload(Property.managed_by),
+            )
+            .where(
+                Property.lga_id == lga_id,
+                
+            )
+            .order_by(Property.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+        return result.scalars().all()
+    async def get_properties_by_state(
+        self,
+        state_id: uuid.UUID,
+        
+        page: int = 1,
+        per_page: int = 20,
+        is_verified: bool = True,
+    ) -> List[Property]:
+        result = await self.db.execute(
+            select(Property)
+            .where(Property.is_verified == is_verified)
+            .options(
+                selectinload(Property.images),
+                selectinload(Property.tenants),
+                selectinload(Property.state),
+                selectinload(Property.lga),
+                selectinload(Property.rent_receipts),
+                selectinload(Property.owner),
+                selectinload(Property.managed_by),
+            )
+            .where(
+                Property.state_id == state_id,
+                
+            )
+            .order_by(Property.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+        return result.scalars().all()
 
     async def get_property_by_lga_user(
         self, lga_id: uuid.UUID, property_id: uuid.UUID, user_id: uuid.UUID

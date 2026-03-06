@@ -268,12 +268,12 @@ class RentalListingService:
     async def get_properties_by_state(
         self,
         state_id: uuid.UUID,
-        current_user,
+       
         page: int = 1,
         per_page: int = 20,
     ) -> List[RentalListingOut]:
         async def handler():
-            await self.permission.check_authenticated(current_user=current_user)
+        
             cache_key = f"rental_listings:state:{state_id}:page:{page}:per:{per_page}"
 
             cached = await cache.get_json(cache_key)

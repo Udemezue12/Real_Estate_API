@@ -19,7 +19,7 @@ from celery.schedules import crontab
 
 from core.settings import settings
 
-REDIS_URL = settings.CELERY_REDIS_URLL
+REDIS_URL = settings.CELERY_REDIS_URL
 
 celery_app = Celery(
     "real_estate_tasks",

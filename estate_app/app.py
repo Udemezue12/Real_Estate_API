@@ -83,7 +83,7 @@ app.include_router(sales_chat_router, prefix="/v2")
 app.include_router(sales_message_router, prefix="/v2/sales")
 app.include_router(rental_message_router, prefix="/v2/rental")
 app.include_router(letter_router, prefix="/v2/letter")
-app.include_router(webhooks_router, prefix="/v2")
+# app.include_router(webhooks_router, prefix="/v2")
 app.include_router(cloudinary_router, prefix="/v2")
 
 app.add_middleware(

@@ -257,7 +257,7 @@ class PropertyService:
     ) -> List[PropertyOut]:
         async def handler():
             user_id = current_user.id
-            await self.permission.check_authenticated(current_user=current_user)
+           
             cache_key = f"properties:{user_id}:{state_id}:page:{page}:per:{per_page}"
             cached = await cache.get_json(cache_key)
             print(f"Cached:::{cached}")
@@ -315,6 +315,32 @@ class PropertyService:
             if cached:
                 return self.mapper.many(items=cached, schema=PropertyOut)
             props = await self.repo.get_properties_by_lga_user(lga_id, user_id)
+
+            props_dicts = self.mapper.many(items=props, schema=PropertyOut)
+            paginated_props = self.paginate.paginate(props_dicts, page, per_page)
+            await cache.set_json(
+                cache_key,
+                self.paginate.get_list_json_dumps(paginated_props=paginated_props),
+                ttl=300,
+            )
+            return paginated_props
+
+        return await breaker.call(handler)
+    async def get_properties_by_lga(
+        self,
+        lga_id: uuid.UUID,
+ 
+        page: int = 1,
+        per_page: int = 20,
+    ) -> List[PropertyOut]:
+        async def handler():
+           
+           
+            cache_key = f"properties::{lga_id}:page:{page}:per:{per_page}"
+            cached = await cache.get_json(cache_key)
+            if cached:
+                return self.mapper.many(items=cached, schema=PropertyOut)
+            props = await self.repo.get_properties_by_lga_user(lga_id)
 
             props_dicts = self.mapper.many(items=props, schema=PropertyOut)
             paginated_props = self.paginate.paginate(props_dicts, page, per_page)
@@ -392,6 +418,8 @@ class PropertyService:
                 f"properties:{user_id}:{lga_id}",
                 f"property::{user_id}:{lga_id}:{property_id}properties:{user_id}:all",
                 f"property:{user_id}:{property_id}",
+                f"properties::{lga_id}"
+                f"properties::{state_id}"
             )
         except Exception:
             print("Cache delete skipped (redis unavailable)")

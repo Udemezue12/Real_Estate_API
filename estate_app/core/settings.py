@@ -8,7 +8,10 @@ from .url_parser import parser
 
 load_dotenv()
 
-
+username = os.getenv("CELERY_REDIS_USERNAME")
+password = os.getenv("CELERY_REDIS_PASSWORD")
+host = os.getenv("CELERY_REDIS_HOST", "").rstrip("/")
+port = os.getenv("CELERY_REDIS_PORT")
 class Settings(BaseSettings):
     FLUTTERWAVE_BASE_URL: str = "https://api.flutterwave.com/v3"
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
@@ -21,10 +24,8 @@ class Settings(BaseSettings):
         f"redis://{os.getenv('RATE_LIMIT_REDIS_USERNAME')}:{os.getenv('RATE_LIMIT_REDIS_PASSWORD')}"
         f"@{os.getenv('RATE_LIMIT_REDIS_HOST')}:{os.getenv('RATE_LIMIT_REDIS_PORT')}/0"
     )
-    CELERY_REDIS_URL: str | None = (
-        f"redis://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
-        f"@{os.getenv('CELERY_REDIS_HOST')}:{os.getenv('CELERY_REDIS_PORT')}/0"
-    )
+    CELERY_REDIS_URL: str =  f"redis://{username}:{password}@{host}:{port}/0"
+    
     CELERY_REDIS_URLL: str | None = (
         f"redis://{os.getenv('CELERY_REDIS_USERNAME')}:{os.getenv('CELERY_REDIS_PASSWORD')}"
         f"@{os.getenv('CELERY_REDIS_HOST')}:{os.getenv('CELERY_REDIS_PORT')}"

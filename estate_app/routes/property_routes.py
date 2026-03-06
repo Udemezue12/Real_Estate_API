@@ -5,6 +5,7 @@ from fastapi_utils.cbv import cbv
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.get_current_user import get_current_user
+from core.check_role_permissions import require_user_and_admin_user, require_admin_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
@@ -24,7 +25,7 @@ class PropertyRoutes:
         self,
         data: PropertyCreate,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).create_property(
@@ -38,7 +39,7 @@ class PropertyRoutes:
         property_id: uuid.UUID,
         data: PropertyUpdate,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).update_property(
@@ -51,7 +52,7 @@ class PropertyRoutes:
         self,
         property_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         await PropertyService(db).delete_property(
@@ -65,7 +66,7 @@ class PropertyRoutes:
         property_id: uuid.UUID,
         state_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).get_property_by_state_user(
@@ -78,7 +79,7 @@ class PropertyRoutes:
         self,
         state_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
         page: int = 1,
         per_page: int = 20,
@@ -94,7 +95,7 @@ class PropertyRoutes:
         lga_id: uuid.UUID,
         property_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).get_one_property(
@@ -107,7 +108,7 @@ class PropertyRoutes:
         self,
         lga_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
         page: int = 1,
         per_page: int = 20,
@@ -121,7 +122,7 @@ class PropertyRoutes:
     async def get_all_user_properties(
         self,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
         page: int = 1,
         per_page: int = 20,
@@ -136,7 +137,7 @@ class PropertyRoutes:
         self,
         property_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).get_single_property_by_user(
@@ -150,7 +151,7 @@ class PropertyRoutes:
         self,
         property_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await PropertyService(db).mark_as_verified(

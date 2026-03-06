@@ -6,6 +6,8 @@ from fastapi_utils.cbv import cbv
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.get_current_user import get_current_user
+from core.check_role_permissions import require_admin_user
+
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
@@ -68,11 +70,11 @@ class RentalsRoutes:
         per_page: int = 20,
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
-        current_user: User = Depends(get_current_user),
+        
 
     ):
         return await RentalListingService(db).get_properties_by_state(
-            state_id=state_id, page=page, per_page=per_page,current_user=current_user
+            state_id=state_id, page=page, per_page=per_page
         )
 
     @router.get(
@@ -88,7 +90,7 @@ class RentalsRoutes:
         per_page: int = 20,
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
-        current_user: User = Depends(get_current_user),
+      
 
     ):
         return await RentalListingService(db).get_properties_by_lga(
@@ -170,7 +172,7 @@ class RentalsRoutes:
         self,
         listing_id: uuid.UUID,
         db: AsyncSession = Depends(get_db_async),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_admin_user),
         _: None = Depends(validate_csrf_dependency),
     ):
         return await RentalListingService(db).mark_as_verified(

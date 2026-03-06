@@ -5,6 +5,7 @@ from fastapi_utils.cbv import cbv
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.get_current_user import get_current_user
+from core.check_role_permissions import require_admin_user, require_user_and_admin_user
 from core.get_db import get_db_async
 from core.safe_handler import safe_handler
 from core.throttling import rate_limit
@@ -29,7 +30,7 @@ class PaymentsRoutes:
     async def initialize_payments(
         self,
         data: RentPaymentSchema,
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_user_and_admin_user),
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
@@ -62,7 +63,7 @@ class PaymentsRoutes:
     async def refund_payment_endpoint(
         self,
         payment_id: int,
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(require_admin_user),
         db: AsyncSession = Depends(get_db_async),
         _: None = Depends(validate_csrf_dependency),
     ):
