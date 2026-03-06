@@ -22,24 +22,24 @@ async def run_autopopulate():
     except Exception:
         logger.exception("Failed to update banks ")
 
-    try:
+    # try:
         
-        try:
+    #     try:
 
-            await StateService(db).create_state()
-        except Exception:
-            await db.rollback()
-        finally:
-            await db.close()
-    except Exception:
-        logger.exception("Failed to create or update states ")
-    try:
+    #         await StateService(db).create_state()
+    #     except Exception:
+    #         await db.rollback()
+    #     finally:
+    #         await db.close()
+    # except Exception:
+    #     logger.exception("Failed to create or update states ")
+    # try:
         
-        try:
-            await LGAService(db).create_lga()
-        except Exception:
-            await db.rollback()
-        finally:
-            await db.close()
-    except Exception:
-        logger.exception("Failed to create or update LGA ")
+    #     try:
+    #         await LGAService(db).create_lga()
+    #     except Exception:
+    #         await db.rollback()
+    #     finally:
+    #         await db.close()
+    # except Exception:
+    #     logger.exception("Failed to create or update LGA ")

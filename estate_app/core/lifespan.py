@@ -80,10 +80,10 @@ async def lifespan(app: FastAPI):
     #             await pinger.start())
     # except Exception:
     #     logger.exception("Failed to start lightweight periodic pinger")
-    # try:
-    #    await run_autopopulate()
-    # except Exception:
-    #     logger.exception("Failed to start")
+    try:
+       await run_autopopulate()
+    except Exception:
+        logger.exception("Failed to start")
    
     logger.info("Application startup complete.")
 

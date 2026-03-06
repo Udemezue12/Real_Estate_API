@@ -27,7 +27,8 @@ celery_app = Celery(
     backend=REDIS_URL,
     
 )
-
+celery_app.conf.broker_use_ssl = {"ssl_cert_reqs": ssl.CERT_NONE}
+celery_app.conf.redis_backend_use_ssl = {"ssl_cert_reqs": ssl.CERT_NONE}
 
 
 celery_app.conf.update(
